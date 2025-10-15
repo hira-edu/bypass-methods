@@ -57,7 +57,7 @@ function Invoke-Download {
         Invoke-WebRequest -Uri $Url -OutFile $OutFile -UseBasicParsing
         return $true
     } catch {
-        Write-Log "Failed to download $OutFile: $($_.Exception.Message)" "ERROR"
+        Write-Log "Failed to download ${OutFile}: $($_.Exception.Message)" "ERROR"
         return $false
     }
 }
