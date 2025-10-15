@@ -107,6 +107,36 @@ endlocal
         if (Test-Path BypassMethods-Portable.zip) { Remove-Item BypassMethods-Portable.zip -Force }
         Compress-Archive -Path portable\* -DestinationPath BypassMethods-Portable.zip
 
+    - name: Verify portable contains all Python sources
+      shell: pwsh
+      run: |
+        # Compare repo python/ tree to portable/app/python/ tree
+        function Get-RelPaths([string]$base, [string]$root) {
+          (Get-ChildItem -Path $root -Recurse -File -Include *.py) | ForEach-Object {
+            $p = $_.FullName.Substring($base.Length).TrimStart('\\')
+            $p
+          }
+        }
+
+        $repoBase = (Resolve-Path .).Path
+        $repoPython = Join-Path $repoBase 'python'
+        $portablePython = Join-Path $repoBase 'portable/app/python'
+
+        if (-not (Test-Path $repoPython)) { Write-Error "python/ directory not found" }
+        if (-not (Test-Path $portablePython)) { Write-Error "portable/app/python not found" }
+
+        $repoList = Get-RelPaths $repoPython $repoPython | Sort-Object
+        $pkgList = Get-RelPaths $portablePython $portablePython | Sort-Object
+
+        $diff = Compare-Object -ReferenceObject $repoList -DifferenceObject $pkgList
+        if ($diff) {
+          Write-Host 'Differences between source python/ and portable/app/python:' -ForegroundColor Yellow
+          $diff | Format-Table -Auto | Out-String | Write-Host
+          Write-Error 'Portable package does not match source python tree.'
+        } else {
+          Write-Host 'Portable python sources match repository.' -ForegroundColor Green
+        }
+
     - name: Upload portable artifact
       uses: actions/upload-artifact@v4
       with:
