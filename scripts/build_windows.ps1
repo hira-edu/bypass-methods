@@ -529,35 +529,24 @@ pause
         Write-Log "4. Check internet connection for downloads" "ERROR"
         exit 1
     } else {
-        Write-Log "ðŸŽ‰ BUILD SUCCESSFUL!" "INFO"
-        if ($WarningCount -gt 0) {
-            Write-Log "âš ï¸ $WarningCount warnings (non-critical)" "WARNING"
-        }
+        Write-Log "BUILD SUCCESSFUL" "INFO"
+        if ($WarningCount -gt 0) { Write-Log "$WarningCount warnings (non-critical)" "WARNING" }
         Write-Host ""
         Write-Log "NEXT STEPS:" "INFO"
         Write-Log "1. Double-click 'launch_framework.bat' to start" "INFO"
         Write-Log "2. Or use the desktop shortcut" "INFO"
         Write-Log "3. Or run: python python\tools\gui_controller.py" "INFO"
         Write-Host ""
-        Write-Log "FEATURES AVAILABLE:" "INFO"
-        Write-Log "âœ… DirectX 11/12 Hooking" "INFO"
-        Write-Log "âœ… Windows API Interception" "INFO"
-        Write-Log "âœ… Advanced Security Features" "INFO"
-        Write-Log "âœ… Performance Optimization" "INFO"
-        Write-Log "âœ… GUI Controller & Dashboard" "INFO"
-        Write-Log "âœ… Security Testing Framework" "INFO"
-        Write-Host ""
         Write-Log "DOCUMENTATION:" "INFO"
-        Write-Log "ðŸ“š User Guide: docs\USER_GUIDE.md" "INFO"
-        Write-Log "ðŸ“š API Reference: docs\API_REFERENCE.md" "INFO"
-        Write-Log "ðŸ“š Architecture: docs\ARCHITECTURE.md" "INFO"
+        Write-Log "User Guide: docs\USER_GUIDE.md" "INFO"
+        Write-Log "API Reference: docs\API_REFERENCE.md" "INFO"
+        Write-Log "Architecture: docs\ARCHITECTURE.md" "INFO"
         Write-Host ""
         Write-Log "SUPPORT:" "INFO"
-        Write-Log "ðŸ› Issues: GitHub Issues" "INFO"
-        Write-Log "ðŸ’¬ Discussions: GitHub Discussions" "INFO"
-        Write-Log "ðŸ”’ Security: SECURITY.md" "INFO"
+        Write-Log "Issues: GitHub Issues" "INFO"
+        Write-Log "Discussions: GitHub Discussions" "INFO"
+        Write-Log "Security: SECURITY.md" "INFO"
     }
-    
 } catch {
     Write-Log "âŒ BUILD FAILED: $($_.Exception.Message)" "ERROR"
     Write-Host ""
@@ -575,5 +564,6 @@ pause
     Write-Host "============================================================================="
     Write-Host ""
 } 
+
 
 
