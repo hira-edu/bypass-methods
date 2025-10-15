@@ -453,8 +453,8 @@ try {
     Write-Log "Creating desktop shortcuts..." "INFO"
     $WshShell = New-Object -comObject WScript.Shell
     $Shortcut = $WshShell.CreateShortcut("$env:USERPROFILE\Desktop\Bypass Methods Framework.lnk")
-    $Shortcut.TargetPath = "python"
-    $Shortcut.Arguments = "python\tools\gui_controller.py"
+    $LaunchPath = Join-Path (Get-Location).Path 'launch_framework.bat'
+    $Shortcut.TargetPath = $LaunchPath
     $Shortcut.WorkingDirectory = (Get-Location).Path
     $Shortcut.Description = "Bypass Methods Framework GUI Controller"
     $Shortcut.Save()
@@ -466,9 +466,8 @@ try {
     if (-not (Test-Path $startMenuPath)) {
         New-Item -ItemType Directory -Path $startMenuPath | Out-Null
     }
-    $Shortcut = $WshShell.CreateShortcut("$startMenuPath\GUI Controller.lnk")
-    $Shortcut.TargetPath = "python"
-    $Shortcut.Arguments = "python\tools\gui_controller.py"
+    $Shortcut = $WshShell.CreateShortcut("$startMenuPath\Bypass Methods Framework.lnk")
+    $Shortcut.TargetPath = $LaunchPath
     $Shortcut.WorkingDirectory = (Get-Location).Path
     $Shortcut.Description = "Bypass Methods Framework GUI Controller"
     $Shortcut.Save()
