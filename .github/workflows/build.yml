@@ -97,6 +97,7 @@ jobs:
 @echo off
 setlocal
 cd /d "%~dp0"
+set "PATH=%CD%\bin;%PATH%"
 echo Starting Bypass Methods Framework...
 "python\python.exe" "app\tools\gui_controller.py" %*
 endlocal
