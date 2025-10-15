@@ -1,4 +1,4 @@
-# Bypass Methods Framework
+﻿# Bypass Methods Framework
 
 [![Build Status](https://github.com/your-org/bypass-methods/workflows/Build%20and%20Test/badge.svg)](https://github.com/your-org/bypass-methods/actions)
 [![Code Coverage](https://codecov.io/gh/your-org/bypass-methods/branch/main/graph/badge.svg)](https://codecov.io/gh/your-org/bypass-methods)
@@ -8,7 +8,7 @@
 
 A production-ready, enterprise-grade DirectX and Windows API hooking framework designed for secure frame capture, process monitoring, and advanced system integration. Built with modern C++17 and Python 3.8+, featuring comprehensive security, performance optimization, and real-time monitoring capabilities.
 
-## 🚀 Features
+## ðŸš€ Features
 
 ### Core Capabilities
 - **DirectX 11/12 Hooking**: Advanced vtable hooking with automatic resource management
@@ -36,7 +36,7 @@ A production-ready, enterprise-grade DirectX and Windows API hooking framework d
 - **Configuration Manager**: JSON-based configuration with validation and live updates
 - **Security Testing Framework**: Comprehensive security validation with automated reporting
 
-## 📋 Requirements
+## ðŸ“‹ Requirements
 
 ### System Requirements
 - **OS**: Windows 10/11 (x64)
@@ -51,7 +51,7 @@ A production-ready, enterprise-grade DirectX and Windows API hooking framework d
 - **CMake**: 3.16 or higher
 - **Git**: Latest version
 
-## 🛠️ Installation
+## Installation
 
 ### Windows Users (Recommended)
 
@@ -65,7 +65,7 @@ A production-ready, enterprise-grade DirectX and Windows API hooking framework d
 
 For detailed Windows installation instructions, see [Windows Installation Guide](docs/WINDOWS_INSTALLATION.md).
 
-### Cross-Platform Installation
+### Installation
 
 1. **Clone the repository**
    ```bash
@@ -100,7 +100,7 @@ For detailed Windows installation instructions, see [Windows Installation Guide]
 
 For detailed installation instructions, configuration options, and troubleshooting, see the [User Guide](docs/USER_GUIDE.md) and [Windows Installation Guide](docs/WINDOWS_INSTALLATION.md).
 
-## 🎯 Quick Usage
+## ðŸŽ¯ Quick Usage
 
 ### Basic Frame Capture
 
@@ -160,7 +160,7 @@ test_report = security.run_security_test()
 print(f"Security test success rate: {test_report['summary']['success_rate']:.1f}%")
 ```
 
-## 📊 Performance Metrics
+## ðŸ“Š Performance Metrics
 
 ### Achieved Performance
 - **Zero Memory Leaks**: Comprehensive RAII implementation
@@ -176,22 +176,22 @@ print(f"Security test success rate: {test_report['summary']['success_rate']:.1f}
 - **Real-time Monitoring**: Security event logging and alerting
 - **Policy Enforcement**: Configurable security policies
 
-## 🏗️ Architecture
+## ðŸ—ï¸ Architecture
 
 The framework follows a modular, layered architecture:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    GUI & Dashboard Layer                    │
-├─────────────────────────────────────────────────────────────┤
-│                  Security Integration Layer                 │
-├─────────────────────────────────────────────────────────────┤
-│                   Python Capture Layer                      │
-├─────────────────────────────────────────────────────────────┤
-│                  C++ Hooking Core Layer                     │
-├─────────────────────────────────────────────────────────────┤
-│                    Windows API Layer                        │
-└─────────────────────────────────────────────────────────────┘
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚                    GUI & Dashboard Layer                    â”‚
+â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+â”‚                  Security Integration Layer                 â”‚
+â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+â”‚                   Python Capture Layer                      â”‚
+â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+â”‚                  C++ Hooking Core Layer                     â”‚
+â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+â”‚                    Windows API Layer                        â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
 ### Core Components
@@ -204,7 +204,7 @@ The framework follows a modular, layered architecture:
 
 For detailed architecture information, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## 🔧 Configuration
+## ðŸ”§ Configuration
 
 ### Security Configuration
 
@@ -246,7 +246,7 @@ For detailed architecture information, see [ARCHITECTURE.md](docs/ARCHITECTURE.m
 }
 ```
 
-## 🧪 Testing
+## ðŸ§ª Testing
 
 ### Run All Tests
 
@@ -269,7 +269,7 @@ python python/tools/security_tester.py
 cmake --build . --target coverage
 ```
 
-## 📚 Documentation
+## ðŸ“š Documentation
 
 - **[User Guide](docs/USER_GUIDE.md)**: Installation, configuration, and usage
 - **[API Reference](docs/API_REFERENCE.md)**: Complete API documentation
@@ -277,7 +277,7 @@ cmake --build . --target coverage
 - **[Contributing](docs/CONTRIBUTING.md)**: Development guidelines
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)**: Common issues and solutions
 
-## 🤝 Contributing
+## ðŸ¤ Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](docs/CONTRIBUTING.md) for:
 
@@ -287,22 +287,22 @@ We welcome contributions! Please see [CONTRIBUTING.md](docs/CONTRIBUTING.md) for
 - Pull request process
 - Code review guidelines
 
-## 📄 License
+## ðŸ“„ License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## ⚠️ Disclaimer
+## âš ï¸ Disclaimer
 
 This framework is designed for legitimate system integration, testing, and development purposes. Users are responsible for ensuring compliance with applicable laws and regulations. The authors are not responsible for any misuse of this software.
 
-## 🆘 Support
+## ðŸ†˜ Support
 
 - **Documentation**: [docs/](docs/)
 - **Issues**: [GitHub Issues](https://github.com/your-org/bypass-methods/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/your-org/bypass-methods/discussions)
 - **Security**: [Security Policy](SECURITY.md)
 
-## 🏆 Acknowledgments
+## ðŸ† Acknowledgments
 
 - DirectX team for the graphics API
 - Windows development community
@@ -312,3 +312,4 @@ This framework is designed for legitimate system integration, testing, and devel
 ---
 
 **Bypass Methods Framework** - Production-ready DirectX and Windows API hooking for secure system integration.
+
