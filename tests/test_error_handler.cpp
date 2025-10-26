@@ -170,8 +170,8 @@ TEST_F(ErrorHandlerTest, ErrorContextClearing) {
 TEST_F(ErrorHandlerTest, ErrorRecovery) {
     // Test automatic recovery
     std::string console_output = capture_console_output([this]() {
-        error_handler_->error("Recovery test", utils::ErrorCategory::WINDOWS_API, 
-                            "TestFunction", "test.cpp", 42, 0, utils::RecoveryStrategy::AUTOMATIC);
+        error_handler_->error("Recovery test", utils::ErrorCategory::WINDOWS_API,
+                            "TestFunction", "test.cpp", 42, 0, utils::RecoveryStrategy::RETRY);
     });
     
     EXPECT_FALSE(console_output.empty());
@@ -179,8 +179,8 @@ TEST_F(ErrorHandlerTest, ErrorRecovery) {
     
     // Test manual recovery
     console_output = capture_console_output([this]() {
-        error_handler_->error("Manual recovery test", utils::ErrorCategory::WINDOWS_API, 
-                            "TestFunction", "test.cpp", 42, 0, utils::RecoveryStrategy::MANUAL);
+        error_handler_->error("Manual recovery test", utils::ErrorCategory::WINDOWS_API,
+                            "TestFunction", "test.cpp", 42, 0, utils::RecoveryStrategy::LOG_AND_CONTINUE);
     });
     
     EXPECT_FALSE(console_output.empty());
@@ -188,8 +188,8 @@ TEST_F(ErrorHandlerTest, ErrorRecovery) {
     
     // Test fatal error
     console_output = capture_console_output([this]() {
-        error_handler_->error("Fatal test", utils::ErrorCategory::WINDOWS_API, 
-                            "TestFunction", "test.cpp", 42, 0, utils::RecoveryStrategy::FATAL);
+        error_handler_->error("Fatal test", utils::ErrorCategory::WINDOWS_API,
+                            "TestFunction", "test.cpp", 42, 0, utils::RecoveryStrategy::TERMINATE);
     });
     
     EXPECT_FALSE(console_output.empty());

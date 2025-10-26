@@ -66,6 +66,7 @@ add_custom_command(TARGET UndownUnlockDXHook POST_BUILD
 # Set up the DLL properties
 target_compile_definitions(UndownUnlockDXHook PRIVATE
     _USRDLL
+    UNDOWNUNLOCK_EXPORTS
 )
 
 # Add the test client executable

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "export.h"
 #include <Windows.h>
 #include <string>
 #include <vector>
@@ -46,7 +47,7 @@ struct FrameSlotHeader {
 /**
  * @brief Class for transporting frame data via shared memory
  */
-class SharedMemoryTransport {
+class UNDOWNUNLOCK_API SharedMemoryTransport {
 public:
     /**
      * @brief Constructor

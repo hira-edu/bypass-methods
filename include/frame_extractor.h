@@ -1,5 +1,6 @@
 #pragma once
 
+#include "export.h"
 #include <Windows.h>
 #include <d3d11.h>
 #include <dxgi.h>
@@ -21,7 +22,7 @@ class SharedMemoryTransport;
 /**
  * @brief Structure containing frame data and metadata
  */
-struct FrameData {
+struct UNDOWNUNLOCK_API FrameData {
     std::vector<uint8_t> data;        // The raw pixel data
     uint32_t width;                   // Frame width
     uint32_t height;                  // Frame height

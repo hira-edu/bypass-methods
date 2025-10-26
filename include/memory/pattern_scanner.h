@@ -117,6 +117,9 @@ public:
     void SetProgressCallback(std::function<void(int)> callback);
 
 private:
+    // Friend test classes for testing private methods
+    friend class ::PatternScannerTest;
+
     std::vector<MemoryRegion> m_memoryRegions;
     std::function<void(int)> m_progressCallback;
 

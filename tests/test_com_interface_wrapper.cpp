@@ -1,4 +1,4 @@
-#include "../../include/hooks/com_interface_wrapper.h"
+#include "hooks/com_interface_wrapper.h"
 #include <gtest/gtest.h>
 #include <windows.h>
 #include <d3d11.h>

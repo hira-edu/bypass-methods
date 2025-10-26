@@ -411,14 +411,14 @@ TEST_F(PatternScannerTest, ErrorRecoveryStrategies) {
     auto error_handler = utils::ErrorHandler::GetInstance();
     
     // Test different recovery strategies
-    error_handler->error("Automatic recovery test", utils::ErrorCategory::SYSTEM, 
-                        "TestFunction", "test.cpp", 42, 0, utils::RecoveryStrategy::AUTOMATIC);
-    
-    error_handler->error("Manual recovery test", utils::ErrorCategory::SYSTEM, 
-                        "TestFunction", "test.cpp", 42, 0, utils::RecoveryStrategy::MANUAL);
-    
-    error_handler->error("Fatal error test", utils::ErrorCategory::SYSTEM, 
-                        "TestFunction", "test.cpp", 42, 0, utils::RecoveryStrategy::FATAL);
+    error_handler->error("Automatic recovery test", utils::ErrorCategory::SYSTEM,
+                        "TestFunction", "test.cpp", 42, 0, utils::RecoveryStrategy::RETRY);
+
+    error_handler->error("Manual recovery test", utils::ErrorCategory::SYSTEM,
+                        "TestFunction", "test.cpp", 42, 0, utils::RecoveryStrategy::LOG_AND_CONTINUE);
+
+    error_handler->error("Fatal error test", utils::ErrorCategory::SYSTEM,
+                        "TestFunction", "test.cpp", 42, 0, utils::RecoveryStrategy::TERMINATE);
 }
 
 // Test performance monitoring alerts

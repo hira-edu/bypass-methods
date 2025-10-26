@@ -99,7 +99,7 @@ TEST_F(RAIIWrappersTest, CriticalSectionWrapperBasic) {
     EXPECT_TRUE(wrapper.is_valid());
     
     // Test enter/leave
-    EXPECT_TRUE(wrapper.enter());
+    wrapper.enter();
     wrapper.leave();
     
     // Test move constructor
@@ -236,12 +236,11 @@ TEST_F(RAIIWrappersTest, ThreadSafety) {
     for (int i = 0; i < 5; ++i) {
         threads.emplace_back([&cs, &counter]() {
             for (int j = 0; j < 100; ++j) {
-                if (cs.enter()) {
-                    int current = counter.load();
-                    std::this_thread::sleep_for(std::chrono::microseconds(1));
-                    counter.store(current + 1);
-                    cs.leave();
-                }
+                cs.enter();
+                int current = counter.load();
+                std::this_thread::sleep_for(std::chrono::microseconds(1));
+                counter.store(current + 1);
+                cs.leave();
             }
         });
     }
