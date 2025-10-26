@@ -31,6 +31,10 @@ logging.basicConfig(
 logger = logging.getLogger("AutomatedTest")
 
 # Import the remote client for testing
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tools'))
+
 from remote_client import RemoteClient
 from named_pipe_manager import SecurityManager
 
