@@ -14,7 +14,7 @@ using namespace UndownUnlock::WindowsHook;
 class HookedFunctionsTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        utils::UndownUnlock::Utils::ErrorHandler::GetInstance()->ClearLogs();
+        UndownUnlock::Utils::ErrorHandler::GetInstance()->ClearLogs();
         UndownUnlock::Utils::PerformanceMonitor::GetInstance()->Reset();
         UndownUnlock::Utils::MemoryTracker::GetInstance()->Reset();
         
@@ -42,7 +42,7 @@ TEST_F(HookedFunctionsTest, HookedSetClipboardData) {
     HANDLE result = HookedSetClipboardData(CF_TEXT, nullptr);
     EXPECT_EQ(result, nullptr);
     
-    auto logs = utils::UndownUnlock::Utils::ErrorHandler::GetInstance()->GetLogs();
+    auto logs = UndownUnlock::Utils::ErrorHandler::GetInstance()->GetLogs();
     bool foundClipboardLog = false;
     for (const auto& log : logs) {
         if (log.message.find("SetClipboardData hook called") != std::string::npos) {
