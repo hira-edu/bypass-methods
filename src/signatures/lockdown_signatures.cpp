@@ -1,8 +1,10 @@
 #include "../../include/signatures/dx_signatures.h"
+#include "../../include/signatures/lockdown_signatures.h"
 #include "../../include/raii_wrappers.h"
 #include "../../include/error_handler.h"
 #include "../../include/memory_tracker.h"
 #include "../../include/performance_monitor.h"
+#include <iterator>
 #include <iostream>
 #include <vector>
 #include <string>
@@ -11,12 +13,44 @@
 namespace UndownUnlock {
 namespace DXHook {
 namespace Signatures {
+namespace ExamSignatures = ::UndownUnlock::Signatures;
 
 // Performance monitoring for LockDown signature operations
 static PerformanceMonitor g_lockdownMonitor("LockDownSignatures");
 
 // Memory tracking for LockDown signature resources
 static MemoryTracker g_lockdownMemory("LockDownSignatures");
+
+namespace {
+
+SignaturePattern ConvertSignatureInfoToPattern(const ExamSignatures::SignatureInfo& info) {
+    auto parsed = ParsePattern(info.idaPattern);
+
+    SignaturePattern pattern;
+    pattern.name = info.name;
+    pattern.pattern = std::move(parsed.first);
+    pattern.mask = std::move(parsed.second);
+    pattern.moduleOrSection = info.module.empty() ? info.vendor : info.module;
+    pattern.description = info.description.empty() ? info.vendor : info.description;
+    return pattern;
+}
+
+std::vector<SignaturePattern> ConvertSignatureInfos(const std::vector<ExamSignatures::SignatureInfo>& infos) {
+    std::vector<SignaturePattern> patterns;
+    patterns.reserve(infos.size());
+
+    if (!infos.empty()) {
+        g_lockdownMemory.TrackAllocation("VendorSignaturePatterns",
+            static_cast<int>(infos.size() * sizeof(SignaturePattern)));
+    }
+
+    for (const auto& info : infos) {
+        patterns.emplace_back(ConvertSignatureInfoToPattern(info));
+    }
+    return patterns;
+}
+
+} // namespace
 
 /**
  * @brief Structure to hold LockDown Browser signatures by version
@@ -167,15 +201,31 @@ std::vector<SignaturePattern> GetLockDownSignatures() {
     try {
         std::vector<SignaturePattern> allSignatures;
         
-        // Track memory allocation for all signatures
-        g_lockdownMemory.TrackAllocation("AllSignatures", sizeof(std::vector<SignaturePattern>));
+        // Vendor defaults (LockDown Browser family baseline)
+        auto vendorDefaults = ConvertSignatureInfos(ExamSignatures::GetLockdownSignatures());
         
         // Get versioned signatures and flatten them
         auto versionedSignatures = GetVersionedLockDownSignatures();
+        size_t versionedCount = 0;
         for (const auto& versionSig : versionedSignatures) {
-            for (const auto& sig : versionSig.patterns) {
-                allSignatures.push_back(sig);
-            }
+            versionedCount += versionSig.patterns.size();
+        }
+
+        const size_t totalCount = vendorDefaults.size() + versionedCount;
+        if (totalCount > 0) {
+            g_lockdownMemory.TrackAllocation("AllSignatures",
+                static_cast<int>(totalCount * sizeof(SignaturePattern)));
+        }
+        allSignatures.reserve(totalCount);
+
+        // Insert vendor defaults first
+        std::move(vendorDefaults.begin(), vendorDefaults.end(),
+                  std::back_inserter(allSignatures));
+
+        for (const auto& versionSig : versionedSignatures) {
+            allSignatures.insert(allSignatures.end(),
+                                 versionSig.patterns.begin(),
+                                 versionSig.patterns.end());
         }
         
         ErrorHandler::LogInfo(ErrorCategory::SIGNATURE_PARSING,
@@ -193,6 +243,89 @@ std::vector<SignaturePattern> GetLockDownSignatures() {
                              "Exception during LockDown signature flattening",
                              {{"Exception", e.what()},
                               {"Operation", "GetLockDownSignatures"}});
+        throw;
+    }
+}
+
+std::vector<SignaturePattern> GetProProctorSignatures() {
+    auto timer = g_lockdownMonitor.StartTimer("GetProProctorSignatures");
+    try {
+        auto signatures = ConvertSignatureInfos(ExamSignatures::GetProProctorSignatures());
+        ErrorHandler::LogInfo(ErrorCategory::SIGNATURE_PARSING,
+                              "ProProctor signatures loaded",
+                              {{"Vendor", "ProProctor"},
+                               {"SignatureCount", std::to_string(signatures.size())}});
+        timer.Stop();
+        g_lockdownMonitor.RecordOperation("GetProProctorSignatures", timer.GetElapsedTime());
+        return signatures;
+    } catch (const std::exception& e) {
+        timer.Stop();
+        ErrorHandler::LogError(ErrorSeverity::ERROR, ErrorCategory::EXCEPTION,
+                               "Exception during ProProctor signature loading",
+                               {{"Exception", e.what()},
+                                {"Operation", "GetProProctorSignatures"}});
+        throw;
+    }
+}
+
+std::vector<SignaturePattern> GetETSSecureBrowserSignatures() {
+    auto timer = g_lockdownMonitor.StartTimer("GetETSSecureBrowserSignatures");
+    try {
+        auto signatures = ConvertSignatureInfos(ExamSignatures::GetETSSignatures());
+        ErrorHandler::LogInfo(ErrorCategory::SIGNATURE_PARSING,
+                              "ETS Secure Browser signatures loaded",
+                              {{"Vendor", "ETS Secure Browser"},
+                               {"SignatureCount", std::to_string(signatures.size())}});
+        timer.Stop();
+        g_lockdownMonitor.RecordOperation("GetETSSecureBrowserSignatures", timer.GetElapsedTime());
+        return signatures;
+    } catch (const std::exception& e) {
+        timer.Stop();
+        ErrorHandler::LogError(ErrorSeverity::ERROR, ErrorCategory::EXCEPTION,
+                               "Exception during ETS signature loading",
+                               {{"Exception", e.what()},
+                                {"Operation", "GetETSSecureBrowserSignatures"}});
+        throw;
+    }
+}
+
+std::vector<SignaturePattern> GetPrometricSignatures() {
+    auto timer = g_lockdownMonitor.StartTimer("GetPrometricSignatures");
+    try {
+        auto signatures = ConvertSignatureInfos(ExamSignatures::GetPrometricSignatures());
+        ErrorHandler::LogInfo(ErrorCategory::SIGNATURE_PARSING,
+                              "Prometric signatures loaded",
+                              {{"Vendor", "Prometric"},
+                               {"SignatureCount", std::to_string(signatures.size())}});
+        timer.Stop();
+        g_lockdownMonitor.RecordOperation("GetPrometricSignatures", timer.GetElapsedTime());
+        return signatures;
+    } catch (const std::exception& e) {
+        timer.Stop();
+        ErrorHandler::LogError(ErrorSeverity::ERROR, ErrorCategory::EXCEPTION,
+                               "Exception during Prometric signature loading",
+                               {{"Exception", e.what()},
+                                {"Operation", "GetPrometricSignatures"}});
+        throw;
+    }
+}
+
+std::vector<SignaturePattern> GetAllExamClientSignatures() {
+    auto timer = g_lockdownMonitor.StartTimer("GetAllExamClientSignatures");
+    try {
+        auto signatures = ConvertSignatureInfos(ExamSignatures::GetAllDefaultExamSignatures());
+        ErrorHandler::LogInfo(ErrorCategory::SIGNATURE_PARSING,
+                              "Aggregate exam signatures loaded",
+                              {{"SignatureCount", std::to_string(signatures.size())}});
+        timer.Stop();
+        g_lockdownMonitor.RecordOperation("GetAllExamClientSignatures", timer.GetElapsedTime());
+        return signatures;
+    } catch (const std::exception& e) {
+        timer.Stop();
+        ErrorHandler::LogError(ErrorSeverity::ERROR, ErrorCategory::EXCEPTION,
+                               "Exception during aggregated exam signature loading",
+                               {{"Exception", e.what()},
+                                {"Operation", "GetAllExamClientSignatures"}});
         throw;
     }
 }

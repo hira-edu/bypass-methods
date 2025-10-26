@@ -594,18 +594,22 @@ namespace CrashUtils {
     }
     
     std::string get_system_version() {
-        OSVERSIONINFOA osvi;
-        ZeroMemory(&osvi, sizeof(OSVERSIONINFOA));
-        osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOA);
+        using RtlGetVersionPtr = LONG (WINAPI*)(LPOSVERSIONINFOW);
 
-#pragma warning(push)
-#pragma warning(disable: 4996)  // Disable deprecation warning for GetVersionExA
-        if (GetVersionExA(&osvi)) {
-#pragma warning(pop)
-            std::ostringstream oss;
-            oss << "Windows " << osvi.dwMajorVersion << "." << osvi.dwMinorVersion;
-            oss << " (Build " << osvi.dwBuildNumber << ")";
-            return oss.str();
+        OSVERSIONINFOW osvi;
+        ZeroMemory(&osvi, sizeof(OSVERSIONINFOW));
+        osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOW);
+
+        const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+        if (ntdll != nullptr) {
+            const auto rtl_get_version = reinterpret_cast<RtlGetVersionPtr>(
+                GetProcAddress(ntdll, "RtlGetVersion"));
+            if (rtl_get_version != nullptr && rtl_get_version(&osvi) == 0) {
+                std::ostringstream oss;
+                oss << "Windows " << osvi.dwMajorVersion << "." << osvi.dwMinorVersion;
+                oss << " (Build " << osvi.dwBuildNumber << ")";
+                return oss.str();
+            }
         }
 
         return "Unknown";

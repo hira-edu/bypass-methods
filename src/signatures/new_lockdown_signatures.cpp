@@ -1,144 +1,189 @@
 #include "../../include/signatures/lockdown_signatures.h"
-#include "../../include/memory/pattern_scanner.h" // For PatternScanner::ParsePatternString
-#include <iostream>
+#include <algorithm> // For std::min / transforms
+#include <cctype>
+#include <unordered_map>
 #include <vector>
-#include <iomanip> // For std::hex, std::setw, std::setfill
-#include <algorithm> // For std::min
 
 namespace UndownUnlock {
 namespace Signatures {
 
-// Static database of LockDown Browser related signatures
-// Using the SignatureInfo struct defined in lockdown_signatures.h
-static const std::vector<SignatureInfo> g_internalLockdownSignatures = {
+namespace {
+
+std::string NormalizeVendorKey(std::string vendor) {
+    std::transform(vendor.begin(), vendor.end(), vendor.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return vendor;
+}
+
+// Static database mapping exam vendors to representative signatures
+const std::unordered_map<std::string, std::vector<SignatureInfo>> g_vendorSignatureCatalog = {
     {
-        "LDB_CheckWindowFocus",                                 // name
-        "55 8B EC 83 E4 F8 81 EC ?? ?? ?? ?? A1 ?? ?? ?? ??",   // idaPattern
-        0,                                                      // searchOffset
-        0                                                       // resultOffset
+        "lockdown",
+        {
+            {
+                "LDB_CheckWindowFocus",
+                "55 8B EC 83 E4 F8 81 EC ?? ?? ?? ?? A1 ?? ?? ?? ??",
+                0,
+                0,
+                "LockDownBrowser.exe",
+                "LockDown Browser",
+                "Window focus validation routine"
+            },
+            {
+                "LDB_IsScreenshotAllowed",
+                "8B FF 55 8B EC 83 EC 10 A1 ?? ?? ?? ?? 33 C5 89 45 FC",
+                0,
+                0,
+                "LockDownBrowser.exe",
+                "LockDown Browser",
+                "Screenshot permission handler"
+            },
+            {
+                "LDB_VirtualMachineDetection",
+                "40 53 48 83 EC 20 48 ?? D9 E8 ?? ?? 00 00 48",
+                0,
+                0,
+                "LockDownBrowser.exe",
+                "LockDown Browser",
+                "Virtual machine / sandbox check"
+            }
+        }
     },
     {
-        "LDB_IsScreenshotAllowed",                              // name
-        "8B FF 55 8B EC 83 EC 10 A1 ?? ?? ?? ?? 33 C5 89 45 FC",// idaPattern
-        0,
-        0
+        "proproctor",
+        {
+            {
+                "PP_WindowMonitor",
+                "48 89 5C 24 18 57 48 83 EC 20 48 8B FA 48 8B D9 FF 15 ?? ?? ?? ?? 84 C0 74 0F",
+                0,
+                0,
+                "ProProctor.exe",
+                "ProProctor",
+                "Foreground window enforcement routine"
+            },
+            {
+                "PP_StreamingIntegrity",
+                "40 53 48 83 EC 40 48 8B DA 48 8B F1 E8 ?? ?? ?? ?? 84 C0 74 12 48 8B CE E8 ?? ?? ?? ?? 85 C0",
+                0,
+                0,
+                "ProProctorDesktop.exe",
+                "ProProctor",
+                "Video streaming hook validation"
+            },
+            {
+                "PP_DeviceAudit",
+                "48 8B C4 48 89 58 08 48 89 70 10 48 89 78 18 55 57 41 54 41 55 41 56 41 57 48 8D 68 A1",
+                0,
+                0,
+                "ProProctorDeviceMonitor.exe",
+                "ProProctor",
+                "Peripheral/device auditing entry point"
+            }
+        }
     },
     {
-        "LDB_VirtualMachineDetection",                          // name
-        // Example pattern that is shorter and has a clear non-wildcard part for testing BMH-like logic
-        "40 53 48 83 EC 20 48 ?? D9 E8 ?? ?? 00 00 48",         // idaPattern
-        0,
-        0
+        "ets",
+        {
+            {
+                "ETS_ScreenShield",
+                "48 83 EC 38 48 8B 05 ?? ?? ?? ?? 48 85 C0 74 0E 48 8B 08 48 8B 01 FF 50 08 84 C0",
+                0,
+                0,
+                "ETSBrowser.exe",
+                "ETS Secure Browser",
+                "Screen capture suppression routine"
+            },
+            {
+                "ETS_ProcessSnapshot",
+                "48 8B C4 48 89 48 08 55 56 57 41 54 41 55 41 56 41 57 48 8D 68 A1",
+                0,
+                0,
+                "ETSBrowser.exe",
+                "ETS Secure Browser",
+                "Process snapshot enumeration handler"
+            },
+            {
+                "ETS_DebuggerSweep",
+                "48 83 EC 28 65 48 8B 04 25 30 00 00 00 48 8B 48 60 48 85 C9 74 0F 48 8B 09",
+                0,
+                0,
+                "ETSBrowser64.exe",
+                "ETS Secure Browser",
+                "Kernel debugger sweep logic"
+            }
+        }
+    },
+    {
+        "prometric",
+        {
+            {
+                "Prometric_FocusCheck",
+                "48 83 EC 48 48 8B D9 48 8B 0D ?? ?? ?? ?? FF 15 ?? ?? ?? ?? 84 C0",
+                0,
+                0,
+                "PrometricSecureWrapper.exe",
+                "Prometric",
+                "Window focus heartbeat"
+            },
+            {
+                "Prometric_DeviceAudit",
+                "48 8B C4 44 88 40 20 55 56 57 48 8D 68 A1 48 81 EC C0 00 00 00 33 C0",
+                0,
+                0,
+                "PrometricDeviceAudit.exe",
+                "Prometric",
+                "Hardware inventory routine"
+            },
+            {
+                "Prometric_StreamingGuard",
+                "40 55 56 57 48 8D 6C 24 C9 48 81 EC C0 00 00 00 48 8B F9 48 8B D3 48 8B CE",
+                0,
+                0,
+                "PrometricStreaming.exe",
+                "Prometric",
+                "Video transport anti-hook check"
+            }
+        }
     }
 };
 
+} // namespace
+
+std::vector<SignatureInfo> GetVendorSignatures(const std::string& vendor) {
+    const auto it = g_vendorSignatureCatalog.find(NormalizeVendorKey(vendor));
+    if (it != g_vendorSignatureCatalog.end()) {
+        return it->second;
+    }
+    return {};
+}
+
 std::vector<SignatureInfo> GetLockdownSignatures() {
-    return g_internalLockdownSignatures;
+    return GetVendorSignatures("lockdown");
 }
 
-// Helper function for manual pattern matching (for testing purposes)
-bool ManualSearch(const std::vector<uint8_t>& data,
-                  const std::vector<uint8_t>& pattern,
-                  const std::string& mask,
-                  size_t& foundOffset) {
-    if (pattern.empty() || data.size() < pattern.size()) {
-        return false;
-    }
-    for (size_t i = 0; i <= data.size() - pattern.size(); ++i) {
-        bool match = true;
-        for (size_t j = 0; j < pattern.size(); ++j) {
-            if (mask[j] == 'x' && data[i + j] != pattern[j]) {
-                match = false;
-                break;
-            }
-        }
-        if (match) {
-            foundOffset = i;
-            return true;
-        }
-    }
-    return false;
+std::vector<SignatureInfo> GetProProctorSignatures() {
+    return GetVendorSignatures("proproctor");
 }
 
+std::vector<SignatureInfo> GetETSSignatures() {
+    return GetVendorSignatures("ets");
+}
 
-// Test function implementation
-// The 'scanner' parameter is a bit problematic for a self-contained unit test of patterns
-// against a local byte array, because PatternScanner::ScanForPattern operates on its internal
-// m_memoryRegions. We'll use scanner for ParsePatternString (static) and do manual search.
-void TestLockdownSignatures(const DXHook::PatternScanner& scanner) {
-    std::cout << "\n--- Testing LockDown Browser Signatures ---" << std::endl;
+std::vector<SignatureInfo> GetPrometricSignatures() {
+    return GetVendorSignatures("prometric");
+}
 
-    // Define a sample memory block.
-    // Embed "LDB_CheckWindowFocus": "55 8B EC 83 E4 F8 81 EC ?? ?? ?? ?? A1 ?? ?? ?? ??"
-    // Actual:                          55 8B EC 83 E4 F8 81 EC DE AD BE EF A1 12 34 56 78
-    std::vector<uint8_t> testMemoryBlock = {
-        0xCA, 0xFE, 0xBA, 0xBE,                                 // Prefix
-        0x55, 0x8B, 0xEC, 0x83, 0xE4, 0xF8, 0x81, 0xEC,         // LDB_CheckWindowFocus part 1
-        0xDE, 0xAD, 0xBE, 0xEF,                                 // Placeholder for ?? ?? ?? ??
-        0xA1,                                                   // A1
-        0x12, 0x34, 0x56, 0x78,                                 // Placeholder for ?? ?? ?? ??
-        0xF0, 0x0D,                                             // Suffix
-        // Embed "LDB_VirtualMachineDetection": "40 53 48 83 EC 20 48 ?? D9 E8 ?? ?? 00 00 48"
-        // Actual:                               40 53 48 83 EC 20 48 FF D9 E8 AA BB 00 00 48
-        0xDE, 0xCO, 0xDE,                                       // Some more prefix
-        0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48,               // LDB_VirtualMachineDetection part 1
-        0xFF,                                                   // Placeholder for ?? (e.g. a register like B8+r)
-        0xD9, 0xE8,                                             // D9 E8
-        0xAA, 0xBB,                                             // Placeholder for ?? ??
-        0x00, 0x00, 0x48                                        // 00 00 48
-    };
-
-    std::cout << "Test Memory Block (size " << testMemoryBlock.size() << "): ";
-    for(size_t i = 0; i < std::min((size_t)32, testMemoryBlock.size()); ++i) { // Print first 32 bytes
-        std::cout << std::hex << std::setw(2) << std::setfill('0') << (int)testMemoryBlock[i] << " ";
+std::vector<SignatureInfo> GetAllDefaultExamSignatures() {
+    std::vector<SignatureInfo> aggregated;
+    size_t total = 0;
+    for (const auto& entry : g_vendorSignatureCatalog) {
+        total += entry.second.size();
     }
-    std::cout << "..." << std::dec << std::endl;
-
-    auto signaturesToTest = GetLockdownSignatures();
-
-    for (const auto& sigInfo : signaturesToTest) {
-        std::cout << "\nTesting signature: '" << sigInfo.name << "' (Pattern: " << sigInfo.idaPattern << ")" << std::endl;
-
-        auto parsedPair = DXHook::PatternScanner::ParsePatternString(sigInfo.idaPattern);
-        const std::vector<uint8_t>& patternBytes = parsedPair.first;
-        const std::string& mask = parsedPair.second;
-
-        if (patternBytes.empty()) {
-            std::cout << "  -> Failed to parse pattern string." << std::endl;
-            continue;
-        }
-
-        std::cout << "  Parsed (" << patternBytes.size() << " bytes): ";
-        for(size_t i = 0; i < patternBytes.size(); ++i) {
-            if (mask[i] == '?') std::cout << "?? ";
-            else std::cout << std::hex << std::setw(2) << std::setfill('0') << (int)patternBytes[i] << " ";
-        }
-        std::cout << std::dec << std::endl;
-
-        // Perform a manual search on our local testMemoryBlock
-        size_t foundOffset = 0;
-        bool foundInTestBlock = ManualSearch(testMemoryBlock, patternBytes, mask, foundOffset);
-
-        if (foundInTestBlock) {
-            std::cout << "  -> FOUND in local test block at offset: " << foundOffset
-                      << " (0x" << std::hex << foundOffset << std::dec << ")." << std::endl;
-        } else {
-            std::cout << "  -> NOT FOUND in local test block." << std::endl;
-        }
-
-        // Note on using the passed 'scanner' instance:
-        // The PatternScanner::ScanForPattern method searches within its own initialized memory regions.
-        // To test against 'testMemoryBlock' using the 'scanner' instance, one would typically need to:
-        // 1. Ensure 'scanner' is not const.
-        // 2. Call 'scanner.AddMemoryRegion({testMemoryBlock.data(), testMemoryBlock.size(), PAGE_READONLY, "TestBlock"})'.
-        // 3. Call 'scanner.ScanForPattern(patternBytes, mask, sigInfo.name, "TestBlock")'.
-        // 4. Remove the test region.
-        // This is too complex for this simple test function's scope if 'scanner' is const or for one-off tests.
-        // The manual search above serves to verify pattern processing for this task.
-        std::cout << "  (Note: To use the provided 'PatternScanner' instance for this specific test block, "
-                  << "it would need to be configured to scan this block.)" << std::endl;
+    aggregated.reserve(total);
+    for (const auto& entry : g_vendorSignatureCatalog) {
+        aggregated.insert(aggregated.end(), entry.second.begin(), entry.second.end());
     }
-    std::cout << "\n--- LockDown Browser Signatures Test Complete ---" << std::endl;
+    return aggregated;
 }
 
 } // namespace Signatures

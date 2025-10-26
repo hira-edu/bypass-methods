@@ -11,6 +11,8 @@
 #include <atomic>
 #include <functional>
 
+#include "signatures/dx_signatures.h"
+
 namespace UndownUnlock {
 namespace DXHook {
 
@@ -20,6 +22,28 @@ class MemoryScanner;
 class FrameExtractor;
 class SharedMemoryTransport;
 class FactoryHooks;
+class ExamSignaturePatcher;
+
+/**
+ * @brief Supported secure exam vendors.
+ */
+enum class ExamVendor {
+    Unknown = 0,
+    LockDown,
+    ProProctor,
+    ETS,
+    Prometric
+};
+
+/**
+ * @brief Resolved signature match for a secure exam client.
+ */
+struct ExamSignatureMatch {
+    std::string name;
+    void* address{nullptr};
+    std::string module;
+    std::string context; // e.g., description/vendor detail
+};
 
 /**
  * @brief Core class that manages DirectX hooking operations
@@ -61,8 +85,13 @@ public:
      */
     bool IsInitialized() const;
 
+    ExamVendor GetDetectedExamVendor() const;
+    const std::vector<Signatures::SignaturePattern>& GetActiveExamSignatures() const;
+    const std::vector<ExamSignatureMatch>& GetResolvedExamSignatures() const;
+
     // Make FactoryHooks a friend class so it can access private members
     friend class FactoryHooks;
+    friend class ExamSignaturePatcher;
 
 private:
     // Private constructor for singleton
@@ -83,6 +112,17 @@ private:
     std::vector<std::function<void(const void*, size_t, uint32_t, uint32_t)>> m_frameCallbacks;
     std::atomic<bool> m_initialized;
     static DXHookCore* s_instance;
+
+    void InitializeExamSignatures();
+    ExamVendor DetectExamVendor() const;
+    std::string GetProcessImageName() const;
+    std::string DescribeExamVendor(ExamVendor vendor) const;
+
+    ExamVendor m_examVendor;
+    bool m_examSignaturesReady;
+    bool m_examPatchesApplied;
+    std::vector<Signatures::SignaturePattern> m_activeExamSignatures;
+    std::vector<ExamSignatureMatch> m_resolvedExamSignatures;
 };
 
 /**

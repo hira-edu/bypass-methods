@@ -61,8 +61,15 @@
       "enabled": true,
       "blocked_processes": [
         "lockdownbrowser.exe",
+        "lockdownbrowseroem.exe",
         "proctortrack.exe",
-        "remoteproctor.exe"
+        "remoteproctor.exe",
+        "proproctor.exe",
+        "proproctordesktop.exe",
+        "etsbrowser.exe",
+        "etsbrowser64.exe",
+        "prometricsecurewrapper.exe",
+        "prometricdevicemonitor.exe"
       ],
       "allowlist_mode": false
     }

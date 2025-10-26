@@ -305,22 +305,7 @@ public:
     std::string get_last_windows_error_message() const;
 
     // Error context - ContextGuard RAII helper class
-    class ContextGuard {
-    public:
-        ContextGuard(ErrorHandler& handler, std::string name, ErrorContext context);
-        ContextGuard(ContextGuard&& other) noexcept;
-        ContextGuard& operator=(ContextGuard&& other) noexcept;
-        ~ContextGuard();
-
-        ContextGuard(const ContextGuard&) = delete;
-        ContextGuard& operator=(const ContextGuard&) = delete;
-
-    private:
-        ErrorHandler* handler_;
-        std::string name_;
-        ErrorContext context_;
-        bool active_;
-    };
+    class ContextGuard;
 
     ContextGuard CreateContext(const std::string& name, const ErrorContext& context = ErrorContext());
     std::vector<ContextSnapshot> GetContexts() const;
@@ -410,6 +395,23 @@ private:
     std::atomic<size_t> current_log_file_size_;
     std::atomic<bool> console_output_enabled_;
     std::atomic<bool> initialized_;
+};
+
+class ErrorHandler::ContextGuard {
+public:
+    ContextGuard(ErrorHandler& handler, std::string name, ErrorContext context);
+    ContextGuard(ContextGuard&& other) noexcept;
+    ContextGuard& operator=(ContextGuard&& other) noexcept;
+    ~ContextGuard();
+
+    ContextGuard(const ContextGuard&) = delete;
+    ContextGuard& operator=(const ContextGuard&) = delete;
+
+private:
+    ErrorHandler* handler_;
+    std::string name_;
+    ErrorContext context_;
+    bool active_;
 };
 
 /**

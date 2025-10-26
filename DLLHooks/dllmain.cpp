@@ -18,8 +18,6 @@
 // Assuming DLLHooks is at the same level as 'include' and 'src' directories.
 #include "../../include/hooks/new_hook_system.h"
 #include "../../include/hooks/dx_hook_core.h" // For DirectXHookManager
-#include "../../include/signatures/lockdown_signatures.h" // For testing lockdown signatures
-#include "../../include/memory/pattern_scanner.h"      // For creating PatternScanner instance for test
 
 
 // Global variables for hook state and parameters are now managed by WindowsApiHookManager
@@ -39,17 +37,6 @@ void InitializeAllHooks() {
     WindowsApiHookManager::GetInstance().InitializeAndInstallHooks();
     // Potentially show a message box or log that hooks are set up by the new manager
     MessageBox(NULL, L"UndownUnlock Hooks Initialized (New System)", L"UndownUnlock", MB_OK);
-
-    // --- Temporary Test for Lockdown Signatures ---
-    std::cout << "\n[DLLMAIN_TEST] Running Lockdown Signatures Test..." << std::endl;
-    UndownUnlock::DXHook::PatternScanner tempScanner;
-    if (tempScanner.Initialize()) { // Initialize scanner's own memory regions (though test uses a local block)
-        UndownUnlock::Signatures::TestLockdownSignatures(tempScanner);
-    } else {
-        std::cerr << "[DLLMAIN_TEST] Failed to initialize PatternScanner for Lockdown Signatures Test." << std::endl;
-    }
-    std::cout << "[DLLMAIN_TEST] Lockdown Signatures Test completed.\n" << std::endl;
-    // --- End Temporary Test ---
 }
 
 void TeardownAllHooks() {

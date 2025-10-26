@@ -41,6 +41,10 @@ std::vector<SignaturePattern> GetDXSignatures();
  * @return Vector of SignaturePattern objects
  */
 std::vector<SignaturePattern> GetLockDownSignatures();
+std::vector<SignaturePattern> GetProProctorSignatures();
+std::vector<SignaturePattern> GetETSSecureBrowserSignatures();
+std::vector<SignaturePattern> GetPrometricSignatures();
+std::vector<SignaturePattern> GetAllExamClientSignatures();
 std::pair<std::vector<uint8_t>, std::string> ParsePattern(const std::string& pattern);
 
 /**

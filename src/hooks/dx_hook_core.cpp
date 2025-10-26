@@ -7,6 +7,11 @@
 #include "../../include/utils/error_handler.h"
 #include "../../include/utils/performance_monitor.h"
 #include "../../include/utils/memory_tracker.h"
+#include "../../include/memory/pattern_scanner.h"
+#include "../../include/signatures/dx_signatures.h"
+#include "../../include/hooks/exam_signature_patcher.h"
+#include <algorithm>
+#include <cctype>
 #include <iostream>
 
 namespace UndownUnlock {
@@ -14,11 +19,58 @@ namespace DXHook {
 
 using namespace UndownUnlock::Hooks;
 
+namespace {
+
+std::string ToLower(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return value;
+}
+
+std::string ExamVendorToString(ExamVendor vendor) {
+    switch (vendor) {
+    case ExamVendor::LockDown: return "LockDown Browser";
+    case ExamVendor::ProProctor: return "ProProctor";
+    case ExamVendor::ETS: return "ETS Secure Browser";
+    case ExamVendor::Prometric: return "Prometric";
+    default: return "Unknown";
+    }
+}
+
+const std::vector<std::string>& VendorProcessNames(ExamVendor vendor) {
+    static const std::vector<std::string> lockdown = {
+        "lockdownbrowser.exe", "lockdownbrowseroem.exe", "lockdown.exe"
+    };
+    static const std::vector<std::string> proProctor = {
+        "proproctor.exe", "proproctordesktop.exe", "psi_proctor_launcher.exe"
+    };
+    static const std::vector<std::string> ets = {
+        "etsbrowser.exe", "etsbrowser64.exe"
+    };
+    static const std::vector<std::string> prometric = {
+        "prometricsecurewrapper.exe", "prometricdevicemonitor.exe"
+    };
+    static const std::vector<std::string> empty;
+
+    switch (vendor) {
+    case ExamVendor::LockDown: return lockdown;
+    case ExamVendor::ProProctor: return proProctor;
+    case ExamVendor::ETS: return ets;
+    case ExamVendor::Prometric: return prometric;
+    default: return empty;
+    }
+}
+
+} // namespace
+
 // Initialize the singleton instance
 DXHookCore* DXHookCore::s_instance = nullptr;
 
 DXHookCore::DXHookCore()
-    : m_initialized(false) {
+    : m_initialized(false),
+      m_examVendor(ExamVendor::Unknown),
+      m_examSignaturesReady(false),
+      m_examPatchesApplied(false) {
     // Initialize utility components
     utils::ErrorHandler::Initialize();
     utils::PerformanceMonitor::Initialize();
@@ -214,6 +266,8 @@ bool DXHookCore::Initialize() {
                 __FUNCTION__, __FILE__, __LINE__
             );
         }
+
+        instance.InitializeExamSignatures();
         
         // Set flag indicating initialization succeeded
         instance.m_initialized = true;
@@ -381,6 +435,143 @@ void DXHookCore::UnregisterFrameCallback(size_t handle) {
 
 bool DXHookCore::IsInitialized() const {
     return m_initialized.load();
+}
+
+ExamVendor DXHookCore::GetDetectedExamVendor() const {
+    return m_examVendor;
+}
+
+const std::vector<Signatures::SignaturePattern>& DXHookCore::GetActiveExamSignatures() const {
+    return m_activeExamSignatures;
+}
+
+const std::vector<ExamSignatureMatch>& DXHookCore::GetResolvedExamSignatures() const {
+    return m_resolvedExamSignatures;
+}
+
+void DXHookCore::InitializeExamSignatures() {
+    if (m_examSignaturesReady) {
+        return;
+    }
+
+    m_examVendor = DetectExamVendor();
+    const std::string vendorLabel = DescribeExamVendor(m_examVendor);
+
+    utils::ErrorHandler::GetInstance()->info(
+        "DXHookCore vendor context: " + vendorLabel,
+        utils::ErrorCategory::GRAPHICS,
+        __FUNCTION__, __FILE__, __LINE__
+    );
+
+    switch (m_examVendor) {
+    case ExamVendor::LockDown:
+        m_activeExamSignatures = Signatures::GetLockDownSignatures();
+        break;
+    case ExamVendor::ProProctor:
+        m_activeExamSignatures = Signatures::GetProProctorSignatures();
+        break;
+    case ExamVendor::ETS:
+        m_activeExamSignatures = Signatures::GetETSSecureBrowserSignatures();
+        break;
+    case ExamVendor::Prometric:
+        m_activeExamSignatures = Signatures::GetPrometricSignatures();
+        break;
+    case ExamVendor::Unknown:
+    default:
+        m_activeExamSignatures = Signatures::GetAllExamClientSignatures();
+        break;
+    }
+
+    if (m_activeExamSignatures.empty()) {
+        utils::ErrorHandler::GetInstance()->warning(
+            "No exam signatures were loaded for vendor context: " + vendorLabel,
+            utils::ErrorCategory::GRAPHICS,
+            __FUNCTION__, __FILE__, __LINE__
+        );
+        m_examSignaturesReady = true;
+        return;
+    }
+
+    PatternScanner scanner;
+    if (!scanner.Initialize()) {
+        utils::ErrorHandler::GetInstance()->warning(
+            "PatternScanner failed to initialize; exam signature resolution skipped",
+            utils::ErrorCategory::GRAPHICS,
+            __FUNCTION__, __FILE__, __LINE__
+        );
+        m_examSignaturesReady = true;
+        return;
+    }
+
+    m_resolvedExamSignatures.clear();
+    for (const auto& signature : m_activeExamSignatures) {
+        auto results = scanner.ScanForPattern(
+            signature.pattern,
+            signature.mask,
+                signature.name,
+            signature.moduleOrSection
+        );
+
+        for (const auto& match : results) {
+            ExamSignatureMatch resolved;
+            resolved.name = signature.name;
+            resolved.address = match.address;
+            resolved.module = signature.moduleOrSection;
+            resolved.context = signature.description;
+            m_resolvedExamSignatures.push_back(std::move(resolved));
+        }
+    }
+
+    utils::ErrorHandler::GetInstance()->info(
+        "Resolved " + std::to_string(m_resolvedExamSignatures.size()) +
+        " exam signature locations for " + vendorLabel,
+        utils::ErrorCategory::GRAPHICS,
+        __FUNCTION__, __FILE__, __LINE__
+    );
+
+    m_examSignaturesReady = true;
+
+    if (!m_resolvedExamSignatures.empty() && !m_examPatchesApplied) {
+        Hooks::ExamSignaturePatcher::ApplyPatches(m_resolvedExamSignatures, m_examVendor);
+        m_examPatchesApplied = true;
+    }
+}
+
+ExamVendor DXHookCore::DetectExamVendor() const {
+    const std::string executable = GetProcessImageName();
+    if (executable.empty()) {
+        return ExamVendor::Unknown;
+    }
+
+    for (ExamVendor vendor : {
+             ExamVendor::LockDown,
+             ExamVendor::ProProctor,
+             ExamVendor::ETS,
+             ExamVendor::Prometric }) {
+        const auto& names = VendorProcessNames(vendor);
+        if (std::find(names.begin(), names.end(), executable) != names.end()) {
+            return vendor;
+        }
+    }
+
+    return ExamVendor::Unknown;
+}
+
+std::string DXHookCore::GetProcessImageName() const {
+    char buffer[MAX_PATH] = {0};
+    DWORD len = GetModuleFileNameA(nullptr, buffer, MAX_PATH);
+    if (len == 0) {
+        return {};
+    }
+
+    std::string path(buffer, len);
+    const size_t pos = path.find_last_of("\\/");
+    std::string fileName = (pos == std::string::npos) ? path : path.substr(pos + 1);
+    return ToLower(fileName);
+}
+
+std::string DXHookCore::DescribeExamVendor(ExamVendor vendor) const {
+    return ExamVendorToString(vendor);
 }
 
 } // namespace DXHook

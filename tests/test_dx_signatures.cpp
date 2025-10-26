@@ -162,6 +162,32 @@ TEST_F(DXSignaturesTest, GetLockDownSignatures) {
     EXPECT_TRUE(foundFocusCheck);
 }
 
+TEST_F(DXSignaturesTest, GetExamClientVendorSignatures) {
+    auto proProctor = GetProProctorSignatures();
+    auto ets = GetETSSecureBrowserSignatures();
+    auto prometric = GetPrometricSignatures();
+    auto aggregate = GetAllExamClientSignatures();
+
+    auto validate = [](const std::vector<SignaturePattern>& signatures) {
+        EXPECT_FALSE(signatures.empty());
+        for (const auto& sig : signatures) {
+            EXPECT_FALSE(sig.name.empty());
+            EXPECT_FALSE(sig.pattern.empty());
+            EXPECT_FALSE(sig.mask.empty());
+            EXPECT_FALSE(sig.module.empty());
+        }
+    };
+
+    validate(proProctor);
+    validate(ets);
+    validate(pometric);
+    validate(aggregate);
+
+    EXPECT_GE(aggregate.size(), proProctor.size());
+    EXPECT_GE(aggregate.size(), ets.size());
+    EXPECT_GE(aggregate.size(), prometric.size());
+}
+
 // Test GetDXInterfaces function
 TEST_F(DXSignaturesTest, GetDXInterfaces) {
     auto interfaces = GetDXInterfaces();

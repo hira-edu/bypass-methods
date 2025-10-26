@@ -32,6 +32,8 @@ set(DLL_HOOKS_SOURCES
     src/shared/shared_memory_transport.cpp
     src/signatures/dx_signatures.cpp
     src/signatures/lockdown_signatures.cpp
+    src/signatures/new_lockdown_signatures.cpp
+    src/hooks/exam_signature_patcher.cpp
     src/com_hooks/factory_hooks.cpp
     # Utility components
     src/utils/raii_wrappers.cpp

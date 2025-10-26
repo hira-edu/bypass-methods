@@ -12,6 +12,9 @@ struct SignatureInfo {
     std::string idaPattern;  // e.g., "55 8B EC 83 E4 F8 ?? ?? ?? ??"
     int searchOffset = 0;    // Offset from the found pattern to the actual function start or desired address
     int resultOffset = 0;    // If the found address needs further adjustment to point to the actual function start
+    std::string module;      // Module or section the signature applies to (LockDownBrowser.exe, etc.)
+    std::string vendor;      // Which secure exam client this signature maps to (LockDown, ProProctor, ETS, Prometric)
+    std::string description; // Optional human-readable description
                            // Often the pattern itself is designed to start at the function, so this might be 0.
                            // Or, if the pattern includes a JMP/CALL, this could be an offset from the pattern start
                            // to the instruction containing the relative address.
@@ -19,15 +22,11 @@ struct SignatureInfo {
 
 // Function to retrieve the list of defined LockDown Browser related signatures
 std::vector<SignatureInfo> GetLockdownSignatures();
-
-// Declaration for the test function (implementation will be in the .cpp)
-// Forward declare PatternScanner if its full definition isn't needed here.
-// However, since the test function is closely tied to it, including its header is fine.
-// Assuming PatternScanner is in DXHook namespace based on previous files.
-namespace DXHook { class PatternScanner; } // Forward declaration
-void TestLockdownSignatures(const DXHook::PatternScanner& scanner);
-// If PatternScanner is in a different namespace, adjust accordingly.
-// For now, assuming UndownUnlock::DXHook::PatternScanner
+std::vector<SignatureInfo> GetProProctorSignatures();
+std::vector<SignatureInfo> GetETSSignatures();
+std::vector<SignatureInfo> GetPrometricSignatures();
+std::vector<SignatureInfo> GetVendorSignatures(const std::string& vendor);
+std::vector<SignatureInfo> GetAllDefaultExamSignatures();
 
 } // namespace Signatures
 } // namespace UndownUnlock

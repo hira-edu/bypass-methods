@@ -1,0 +1,25 @@
+name: Publish SecurityHooked Artifact
+
+on:
+  push:
+    tags:
+      - "securityhooked-v*"
+
+jobs:
+  publish-securityhooked:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download & publish SecurityHooked artifact
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = "${{ github.ref_name }}".Replace("securityhooked-v", "")
+          pwsh -File "scripts/releases/publish_securityhooked_artifact.ps1" `
+            -Version $version `
+            -ReleaseTag "${{ github.ref_name }}" `
+            -Repo "${{ github.repository }}" `
+            -Upload
