@@ -118,7 +118,7 @@ public:
 
 private:
     // Friend test classes for testing private methods
-    friend class ::PatternScannerTest;
+    // Note: Tests can access private members through public methods instead
 
     std::vector<MemoryRegion> m_memoryRegions;
     std::function<void(int)> m_progressCallback;

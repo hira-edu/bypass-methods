@@ -94,8 +94,7 @@ public:
     friend class ExamSignaturePatcher;
 
 private:
-    // Friend test classes for testing private members
-    friend class DXHookCoreTest;
+    // Note: Tests can access private members through public methods
 
     // Private constructor for singleton
     DXHookCore();
