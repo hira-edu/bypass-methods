@@ -183,6 +183,8 @@ struct PrioritizedTask {
     }
 };
 
+class TaskBuilder;
+
 /**
  * Thread pool for efficient task execution
  */
@@ -238,6 +240,7 @@ public:
     bool is_paused() const;
     
 private:
+    friend class TaskBuilder;
     // Internal methods
     void worker_thread_function(size_t thread_id);
     void process_task(PrioritizedTask& task);
