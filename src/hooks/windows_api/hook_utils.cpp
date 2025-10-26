@@ -16,7 +16,9 @@ bool HookUtils::InstallHook(void* targetFunction, void* hookFunction, BYTE* orig
     // Change memory protection to allow writing
     if (VirtualProtect(targetFunction, 5, PAGE_EXECUTE_READWRITE, &oldProtect)) {
         // Write a JMP instruction (0xE9) followed by a relative address
-        DWORD relativeAddress = (DWORD)hookFunction - (DWORD)targetFunction - 5;
+        DWORD relativeAddress = static_cast<DWORD>(
+            reinterpret_cast<uintptr_t>(hookFunction) -
+            reinterpret_cast<uintptr_t>(targetFunction) - 5);
         *((BYTE*)targetFunction) = 0xE9;
         *((DWORD*)((BYTE*)targetFunction + 1)) = relativeAddress;
 

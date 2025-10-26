@@ -303,9 +303,25 @@ public:
     // Windows error utilities
     std::string get_windows_error_message(DWORD error_code) const;
     std::string get_last_windows_error_message() const;
-    
-    // Error context
-    class ContextGuard;
+
+    // Error context - ContextGuard RAII helper class
+    class ContextGuard {
+    public:
+        ContextGuard(ErrorHandler& handler, std::string name, ErrorContext context);
+        ContextGuard(ContextGuard&& other) noexcept;
+        ContextGuard& operator=(ContextGuard&& other) noexcept;
+        ~ContextGuard();
+
+        ContextGuard(const ContextGuard&) = delete;
+        ContextGuard& operator=(const ContextGuard&) = delete;
+
+    private:
+        ErrorHandler* handler_;
+        std::string name_;
+        ErrorContext context_;
+        bool active_;
+    };
+
     ContextGuard CreateContext(const std::string& name, const ErrorContext& context = ErrorContext());
     std::vector<ContextSnapshot> GetContexts() const;
     void set_error_context(const ErrorContext& context);
@@ -314,7 +330,7 @@ public:
     void push_error_context(const std::string& context);
     void pop_error_context();
     std::string get_current_error_context() const;
-    
+
     // Convenience logging APIs
     void LogInfo(const std::string& component, const std::string& message);
     void LogWarning(const std::string& component, const std::string& message);
@@ -330,23 +346,6 @@ public:
 private:
     ErrorHandler();
     ~ErrorHandler();
-
-    class ContextGuard {
-    public:
-        ContextGuard(ErrorHandler& handler, std::string name, ErrorContext context);
-        ContextGuard(ContextGuard&& other) noexcept;
-        ContextGuard& operator=(ContextGuard&& other) noexcept;
-        ~ContextGuard();
-        
-        ContextGuard(const ContextGuard&) = delete;
-        ContextGuard& operator=(const ContextGuard&) = delete;
-    
-    private:
-        ErrorHandler* handler_;
-        std::string name_;
-        ErrorContext context_;
-        bool active_;
-    };
     
     // Delete copy semantics
     ErrorHandler(const ErrorHandler&) = delete;
@@ -357,6 +356,7 @@ private:
     void cleanup_log_outputs();
     void write_to_outputs(const ErrorInfo& error_info);
     void handle_recovery(const ErrorInfo& error_info);
+    void execute_recovery_strategy(RecoveryStrategy strategy, const ErrorInfo& error_info);
     std::string format_error_message(const ErrorInfo& error_info) const;
     std::string get_timestamp_string() const;
     void check_log_rotation();
@@ -382,8 +382,8 @@ private:
     
     // Statistics
     mutable std::mutex stats_mutex_;
-    std::vector<std::atomic<size_t>> severity_counts_;
-    std::vector<std::atomic<size_t>> category_counts_;
+    std::vector<size_t> severity_counts_;  // Protected by stats_mutex_
+    std::vector<size_t> category_counts_;  // Protected by stats_mutex_
     std::atomic<size_t> total_error_count_;
     
     // Recovery strategies
@@ -470,7 +470,8 @@ private:
     size_t max_files_;
     HANDLE file_handle_;
     std::mutex file_mutex_;
-    
+    size_t current_log_file_size_;
+
     bool open_file();
     void close_file();
     void check_file_size();

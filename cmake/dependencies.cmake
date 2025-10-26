@@ -108,6 +108,8 @@ function(setup_dependency_targets)
         d3d11
         dxgi
         windowscodecs
+        dbghelp
+        psapi
     )
     
     # Add DirectX Headers if available

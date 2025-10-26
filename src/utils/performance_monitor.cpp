@@ -1,5 +1,6 @@
 #include "utils/performance_monitor.h"
 #include "utils/error_handler.h"
+#include "utils/memory_tracker.h"
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -8,6 +9,7 @@
 #include <limits>
 #include <numeric>
 #include <psapi.h>
+#include <thread>
 #include <pdh.h>
 #include <sstream>
 #include <thread>
@@ -36,25 +38,7 @@ private:
     static ULARGE_INTEGER last_system_time_;
 };
 
-class MemoryUsageMonitor {
-public:
-    static void start_monitoring(std::chrono::milliseconds interval = std::chrono::seconds(1));
-    static void stop_monitoring();
-    static size_t get_memory_usage();
-    static size_t get_peak_memory_usage();
-
-private:
-    static void monitoring_worker();
-    static size_t calculate_memory_usage();
-
-    static std::atomic<size_t> memory_usage_;
-    static std::atomic<size_t> peak_memory_usage_;
-    static std::chrono::system_clock::time_point last_check_;
-    static std::chrono::milliseconds check_interval_;
-    static std::atomic<bool> monitoring_enabled_;
-    static std::thread monitoring_thread_;
-    static std::atomic<bool> thread_running_;
-};
+// MemoryUsageMonitor is now defined in memory_tracker.h
 
 class ThreadUsageMonitor {
 public:
@@ -163,13 +147,7 @@ std::atomic<bool> CpuUsageMonitor::thread_running_(false);
 ULARGE_INTEGER CpuUsageMonitor::last_cpu_time_ = {0};
 ULARGE_INTEGER CpuUsageMonitor::last_system_time_ = {0};
 
-std::atomic<size_t> MemoryUsageMonitor::memory_usage_(0);
-std::atomic<size_t> MemoryUsageMonitor::peak_memory_usage_(0);
-std::chrono::system_clock::time_point MemoryUsageMonitor::last_check_;
-std::chrono::milliseconds MemoryUsageMonitor::check_interval_(std::chrono::seconds(1));
-std::atomic<bool> MemoryUsageMonitor::monitoring_enabled_(false);
-std::thread MemoryUsageMonitor::monitoring_thread_;
-std::atomic<bool> MemoryUsageMonitor::thread_running_(false);
+// MemoryUsageMonitor static members are now initialized in memory_tracker.cpp
 
 std::atomic<size_t> ThreadUsageMonitor::thread_count_(0);
 std::atomic<size_t> ThreadUsageMonitor::active_thread_count_(0);
@@ -618,6 +596,50 @@ namespace PerformanceUtils {
         
         return recommendations;
     }
+}
+
+// PerformanceMonitor missing implementations
+void PerformanceMonitor::set_config(const PerformanceConfig& config) {
+    config_ = config;
+}
+
+void PerformanceMonitor::sampling_worker() {
+    // Simple stub - just sleep and exit
+    // In full implementation, this would collect performance samples
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+}
+
+void PerformanceMonitor::record_timer_stat(const std::string& name, double duration, const std::string& context) {
+    // Timer recording logic would go here
+}
+
+// CpuUsageMonitor missing implementations
+void CpuUsageMonitor::start_monitoring(std::chrono::milliseconds interval) {
+    monitoring_enabled_.store(true);
+    check_interval_ = interval;
+}
+
+void CpuUsageMonitor::stop_monitoring() {
+    monitoring_enabled_.store(false);
+}
+
+double CpuUsageMonitor::get_cpu_usage() {
+    // CPU usage calculation would go here
+    return 0.0;
+}
+
+// MemoryUsageMonitor missing implementation
+size_t MemoryUsageMonitor::get_memory_usage() {
+    return MemoryTracker::get_instance().get_current_byte_count();
+}
+
+// ThreadUsageMonitor missing implementations
+void ThreadUsageMonitor::start_monitoring(std::chrono::milliseconds interval) {
+    // Thread monitoring start logic
+}
+
+void ThreadUsageMonitor::stop_monitoring() {
+    // Thread monitoring stop logic
 }
 
 } // namespace UndownUnlock::Utils

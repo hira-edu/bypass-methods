@@ -1,0 +1,9 @@
+
+C:\Users\Workstation\Documents\GitHub\bypass-methods\src\utils\memory_tracker.cpp(357,21): error C2039: 'print_stats': is not a member of 'UndownUnlock::Utils::MemoryTracker' [C:\Users\Workstation\Documents\GitHub\bypass-methods\build\UndownUnlockDXHook.vcxproj]
+C:\Users\Workstation\Documents\GitHub\bypass-methods\src\utils\memory_tracker.cpp(358,18): error C3861: 'get_stats': identifier not found [C:\Users\Workstation\Documents\GitHub\bypass-methods\build\UndownUnlockDXHook.vcxproj]
+C:\Users\Workstation\Documents\GitHub\bypass-methods\src\utils\memory_tracker.cpp(360,18): error C3861: 'format_stats': identifier not found [C:\Users\Workstation\Documents\GitHub\bypass-methods\build\UndownUnlockDXHook.vcxproj]
+C:\Users\Workstation\Documents\GitHub\bypass-methods\src\utils\memory_tracker.cpp(363,21): error C2039: 'print_leaks': is not a member of 'UndownUnlock::Utils::MemoryTracker' [C:\Users\Workstation\Documents\GitHub\bypass-methods\build\UndownUnlockDXHook.vcxproj]
+C:\Users\Workstation\Documents\GitHub\bypass-methods\src\utils\memory_tracker.cpp(364,18): error C3861: 'detect_leaks': identifier not found [C:\Users\Workstation\Documents\GitHub\bypass-methods\build\UndownUnlockDXHook.vcxproj]
+C:\Users\Workstation\Documents\GitHub\bypass-methods\src\utils\memory_tracker.cpp(370,9): error C2530: 'leak_alloc': references must be initialized [C:\Users\Workstation\Documents\GitHub\bypass-methods\build\UndownUnlockDXHook.vcxproj]
+C:\Users\Workstation\Documents\GitHub\bypass-methods\src\utils\memory_tracker.cpp(370,9): error C3531: 'leak_alloc': a symbol whose type contains 'auto' must have an initializer [C:\Users\Workstation\Documents\GitHub\bypass-methods\build\UndownUnlockDXHook.vcxproj]
+C:\Users\Workstation\Documents\GitHub\bypass-methods\src\utils\memory_tracker.cpp(370,37): error C2143: syntax error: missing ';' before ':' [C:\Users\Workstation\Documents\GitHub\bypass-methods\build\UndownUnlockDXHook.vcxproj]

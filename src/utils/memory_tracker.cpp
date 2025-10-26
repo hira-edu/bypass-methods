@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <fstream>
 #include <dbghelp.h>
+#include <psapi.h>
 
 namespace UndownUnlock::Utils {
 
@@ -84,10 +85,10 @@ void* MemoryTracker::track_allocation(void* address, size_t size, AllocationType
     if (!tracking_enabled_.load() || !config_.enabled) {
         return address;
     }
-    
+
     std::lock_guard<std::mutex> lock(allocations_mutex_);
-    
-    MemoryAllocation allocation;
+
+    AllocationInfo allocation;
     allocation.address = address;
     allocation.size = size;
     allocation.allocation_type = allocation_type_to_string(type);
@@ -95,19 +96,22 @@ void* MemoryTracker::track_allocation(void* address, size_t size, AllocationType
     allocation.file = file;
     allocation.line = line;
     allocation.timestamp = std::chrono::system_clock::now();
-    allocation.thread_id = GetCurrentThreadId();
+    allocation.allocation_time = allocation.timestamp;
+    allocation.thread_id = std::to_string(GetCurrentThreadId());
     allocation.is_freed = false;
-    
+    allocation.is_array = false;
+    allocation.array_size = 0;
+
     if (config_.track_stack_traces) {
         allocation.stack_trace = get_stack_trace(config_.max_stack_depth);
     }
-    
+
     allocations_[address] = allocation;
-    
+
     if (config_.track_allocation_types) {
         allocations_by_type_[allocation.allocation_type].push_back(allocation);
     }
-    
+
     update_stats(allocation, true);
     allocation_count_.fetch_add(1);
     
@@ -122,6 +126,8 @@ void* MemoryTracker::track_allocation(void* address, size_t size, AllocationType
         check_for_leaks();
         last_leak_check_ = now;
     }
+
+    return address;
 }
 
 void MemoryTracker::track_deallocation(void* address, AllocationType type) {
@@ -144,7 +150,7 @@ void MemoryTracker::track_deallocation(void* address, AllocationType type) {
             auto& type_allocations = allocations_by_type_[it->second.allocation_type];
             type_allocations.erase(
                 std::remove_if(type_allocations.begin(), type_allocations.end(),
-                              [address](const MemoryAllocation& alloc) {
+                              [address](const AllocationInfo& alloc) {
                                   return alloc.address == address;
                               }),
                 type_allocations.end()
@@ -153,84 +159,44 @@ void MemoryTracker::track_deallocation(void* address, AllocationType type) {
     }
 }
 
-AllocationHandle MemoryTracker::track_allocation(const std::string& name, size_t size, MemoryCategory category) {
-    if (name.empty() || size == 0) {
-        return 0;
-    }
-    
-    AllocationHandle id = next_allocation_id_.fetch_add(1, std::memory_order_relaxed);
-    ActiveAllocationInfo info;
-    info.id = id;
-    info.name = name;
-    info.category = category;
-    info.size = size;
-    info.timestamp = std::chrono::system_clock::now();
-    
-    {
-        std::lock_guard<std::mutex> lock(active_named_allocations_mutex_);
-        active_named_allocations_[id] = info;
-    }
-    
-    track_named_allocation(name, size);
-    return id;
-}
-
-void MemoryTracker::release_allocation(AllocationHandle handle) {
-    if (handle == 0) {
-        return;
-    }
-    
-    ActiveAllocationInfo info;
-    bool found = false;
-    {
-        std::lock_guard<std::mutex> lock(active_named_allocations_mutex_);
-        auto it = active_named_allocations_.find(handle);
-        if (it != active_named_allocations_.end()) {
-            info = it->second;
-            active_named_allocations_.erase(it);
-            found = true;
-        }
-    }
-    
-    if (!found) {
-        return;
-    }
-    
-    track_named_deallocation(info.name, info.size);
-}
-
-bool MemoryTracker::has_allocation(AllocationHandle handle) const {
-    if (handle == 0) {
-        return false;
-    }
-    
-    std::lock_guard<std::mutex> lock(active_named_allocations_mutex_);
-    return active_named_allocations_.find(handle) != active_named_allocations_.end();
-}
-
 MemoryStats MemoryTracker::get_stats() const {
     std::lock_guard<std::mutex> lock(allocations_mutex_);
     return stats_;
 }
 
-std::vector<MemoryLeak> MemoryTracker::detect_leaks() {
+size_t MemoryTracker::get_current_allocation_count() const {
+    return stats_.current_allocations.load();
+}
+
+size_t MemoryTracker::get_current_byte_count() const {
+    return stats_.current_bytes_allocated.load();
+}
+
+size_t MemoryTracker::get_peak_allocation_count() const {
+    return stats_.peak_allocations.load();
+}
+
+size_t MemoryTracker::get_peak_byte_count() const {
+    return stats_.peak_bytes_allocated.load();
+}
+
+LeakInfo MemoryTracker::detect_leaks() {
     std::lock_guard<std::mutex> lock(allocations_mutex_);
-    std::vector<MemoryLeak> leaks;
-    
+    LeakInfo leak_info;
+    leak_info.detection_time = std::chrono::system_clock::now();
+    leak_info.total_leak_count = 0;
+    leak_info.total_leak_bytes = 0;
+
     for (const auto& pair : allocations_) {
         const auto& allocation = pair.second;
         if (!allocation.is_freed) {
-            MemoryLeak leak;
-            leak.allocation = allocation;
-            leak.detection_time = std::chrono::system_clock::now();
-            leak.leak_type = allocation.allocation_type;
-            leak.leak_size = allocation.size;
-            leak.leak_count = 1;
-            leaks.push_back(leak);
+            leak_info.leaks.push_back(allocation);
+            leak_info.total_leak_count++;
+            leak_info.total_leak_bytes += allocation.size;
         }
     }
-    
-    return leaks;
+
+    return leak_info;
 }
 
 void MemoryTracker::Reset() {
@@ -273,18 +239,18 @@ bool MemoryTracker::is_initialized() const {
     return initialized_.load(std::memory_order_acquire);
 }
 
-std::vector<MemoryAllocation> MemoryTracker::get_allocations_by_type(const std::string& type) {
+std::vector<AllocationInfo> MemoryTracker::get_allocations_by_type(const std::string& type) const {
     std::lock_guard<std::mutex> lock(allocations_mutex_);
     auto it = allocations_by_type_.find(type);
     if (it != allocations_by_type_.end()) {
         return it->second;
     }
-    return std::vector<MemoryAllocation>();
+    return std::vector<AllocationInfo>();
 }
 
-std::vector<MemoryAllocation> MemoryTracker::get_allocations_by_function(const std::string& function) {
+std::vector<AllocationInfo> MemoryTracker::get_allocations_by_function(const std::string& function) const {
     std::lock_guard<std::mutex> lock(allocations_mutex_);
-    std::vector<MemoryAllocation> result;
+    std::vector<AllocationInfo> result;
     
     for (const auto& pair : allocations_) {
         if (pair.second.function == function) {
@@ -295,16 +261,16 @@ std::vector<MemoryAllocation> MemoryTracker::get_allocations_by_function(const s
     return result;
 }
 
-std::vector<MemoryAllocation> MemoryTracker::get_allocations_by_file(const std::string& file) {
+std::vector<AllocationInfo> MemoryTracker::get_allocations_by_file(const std::string& file) const {
     std::lock_guard<std::mutex> lock(allocations_mutex_);
-    std::vector<MemoryAllocation> result;
-    
+    std::vector<AllocationInfo> result;
+
     for (const auto& pair : allocations_) {
         if (pair.second.file == file) {
             result.push_back(pair.second);
         }
     }
-    
+
     return result;
 }
 
@@ -335,12 +301,12 @@ void MemoryTracker::generate_report(const std::string& filename) {
     file << format_stats(stats);
     
     file << "\n=== Memory Leaks ===\n";
-    if (leaks.empty()) {
+    if (leaks.leaks.empty()) {
         file << "No memory leaks detected.\n";
     } else {
-        file << "Found " << leaks.size() << " memory leaks:\n\n";
-        for (const auto& leak : leaks) {
-            file << format_leak(leak) << "\n";
+        file << "Found " << leaks.total_leak_count << " memory leaks (" << leaks.total_leak_bytes << " bytes):\n\n";
+        for (const auto& leak_alloc : leaks.leaks) {
+            file << format_allocation(leak_alloc) << "\n";
         }
     }
     
@@ -361,17 +327,17 @@ void MemoryTracker::print_stats() {
 void MemoryTracker::print_leaks() {
     auto leaks = detect_leaks();
     printf("=== Memory Leaks ===\n");
-    if (leaks.empty()) {
+    if (leaks.leaks.empty()) {
         printf("No memory leaks detected.\n");
     } else {
-        printf("Found %zu memory leaks:\n\n", leaks.size());
-        for (const auto& leak : leaks) {
-            printf("%s\n", format_leak(leak).c_str());
+        printf("Found %zu memory leaks:\n\n", leaks.total_leak_count);
+        for (const auto& leak_alloc : leaks.leaks) {
+            printf("%s\n", format_allocation(leak_alloc).c_str());
         }
     }
 }
 
-std::string MemoryTracker::get_stack_trace(size_t max_depth) {
+std::string MemoryTracker::get_stack_trace(size_t max_depth) const {
     // This is a simplified stack trace implementation
     // In a production environment, you'd want to use a more robust solution
     std::ostringstream oss;
@@ -379,7 +345,7 @@ std::string MemoryTracker::get_stack_trace(size_t max_depth) {
     return oss.str();
 }
 
-std::string MemoryTracker::allocation_type_to_string(AllocationType type) {
+std::string MemoryTracker::allocation_type_to_string(AllocationType type) const {
     switch (type) {
         case AllocationType::NEW: return "NEW";
         case AllocationType::NEW_ARRAY: return "NEW_ARRAY";
@@ -395,7 +361,7 @@ std::string MemoryTracker::allocation_type_to_string(AllocationType type) {
     }
 }
 
-void MemoryTracker::update_stats(const MemoryAllocation& allocation, bool is_allocation) {
+void MemoryTracker::update_stats(const AllocationInfo& allocation, bool is_allocation) {
     if (is_allocation) {
         stats_.total_allocations.fetch_add(1);
         stats_.current_allocations.fetch_add(1);
@@ -418,33 +384,51 @@ void MemoryTracker::update_stats(const MemoryAllocation& allocation, bool is_all
 }
 
 void MemoryTracker::check_for_leaks() {
-    auto leaks = detect_leaks();
+    auto leak_info = detect_leaks();
     std::lock_guard<std::mutex> lock(leaks_mutex_);
-    
-    for (const auto& leak : leaks) {
+
+    for (const auto& leak_alloc : leak_info.leaks) {
+        // Convert AllocationInfo to MemoryLeak for storage
+        MemoryLeak leak;
+        leak.address = leak_alloc.address;
+        leak.size = leak_alloc.size;
+        leak.leak_size = leak_alloc.size;
+        leak.allocation_type = leak_alloc.allocation_type;
+        leak.leak_type = leak_alloc.allocation_type;
+        leak.file = leak_alloc.file;
+        leak.line = leak_alloc.line;
+        leak.function = leak_alloc.function;
+        leak.stack_trace = leak_alloc.stack_trace;
+        leak.allocation_time = leak_alloc.allocation_time;
+        leak.detection_time = leak_info.detection_time;
+        leak.thread_id = leak_alloc.thread_id;
+        leak.allocation = leak_alloc;
+        leak.leak_count = 1;
         report_leak(leak);
+        detected_leaks_.push_back(leak);
     }
-    
-    detected_leaks_.insert(detected_leaks_.end(), leaks.begin(), leaks.end());
+
     stats_.leak_count.store(detected_leaks_.size());
 }
 
 void MemoryTracker::report_leak(const MemoryLeak& leak) {
-    if (config_.leak_callback) {
-        config_.leak_callback(leak);
+    auto& callback = config_.leak_callback;
+    if (callback) {
+        callback(leak);
     }
-    
-    LOG_WARNING("Memory leak detected: " + leak.leak_type + 
+
+    LOG_WARNING("Memory leak detected: " + leak.leak_type +
                 " (" + std::to_string(leak.leak_size) + " bytes)", ErrorCategory::MEMORY);
 }
 
 void MemoryTracker::report_stats(const MemoryStats& stats) {
-    if (config_.stats_callback) {
-        config_.stats_callback(stats);
+    auto& callback = config_.stats_callback;
+    if (callback) {
+        callback(stats);
     }
 }
 
-std::string MemoryTracker::format_allocation(const MemoryAllocation& allocation) {
+std::string MemoryTracker::format_allocation(const AllocationInfo& allocation) const {
     std::ostringstream oss;
     oss << "Address: 0x" << std::hex << std::setw(16) << std::setfill('0') 
         << reinterpret_cast<uintptr_t>(allocation.address) << std::dec
@@ -457,7 +441,7 @@ std::string MemoryTracker::format_allocation(const MemoryAllocation& allocation)
     return oss.str();
 }
 
-std::string MemoryTracker::format_leak(const MemoryLeak& leak) {
+std::string MemoryTracker::format_leak(const MemoryLeak& leak) const {
     std::ostringstream oss;
     oss << "Leak Type: " << leak.leak_type
         << " Size: " << leak.leak_size << " bytes"
@@ -467,7 +451,7 @@ std::string MemoryTracker::format_leak(const MemoryLeak& leak) {
     return oss.str();
 }
 
-std::string MemoryTracker::format_stats(const MemoryStats& stats) {
+std::string MemoryTracker::format_stats(const MemoryStats& stats) const {
     std::ostringstream oss;
     oss << "Total Allocations: " << stats.total_allocations.load() << "\n"
         << "Total Deallocations: " << stats.total_deallocations.load() << "\n"
@@ -495,13 +479,16 @@ void MemoryTracker::cleanup_old_samples() {
     }
 }
 
-std::string MemoryTracker::format_timestamp(const std::chrono::system_clock::time_point& timestamp) {
+std::string MemoryTracker::format_timestamp(const std::chrono::system_clock::time_point& timestamp) const {
     auto time_t = std::chrono::system_clock::to_time_t(timestamp);
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         timestamp.time_since_epoch()) % 1000;
-    
+
+    std::tm local_time;
+    localtime_s(&local_time, &time_t);
+
     std::ostringstream oss;
-    oss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+    oss << std::put_time(&local_time, "%Y-%m-%d %H:%M:%S");
     oss << "." << std::setfill('0') << std::setw(3) << ms.count();
     return oss.str();
 }
@@ -519,17 +506,40 @@ void MemoryLeakDetector::shutdown() {
 }
 
 std::vector<MemoryLeak> MemoryLeakDetector::detect_leaks() {
-    return MemoryTracker::get_instance().detect_leaks();
+    auto leak_info = MemoryTracker::get_instance().detect_leaks();
+    std::vector<MemoryLeak> memory_leaks;
+
+    // Convert AllocationInfo vector to MemoryLeak vector
+    for (const auto& alloc : leak_info.leaks) {
+        MemoryLeak leak;
+        leak.address = alloc.address;
+        leak.size = alloc.size;
+        leak.leak_size = alloc.size;
+        leak.allocation_type = alloc.allocation_type;
+        leak.leak_type = alloc.allocation_type;
+        leak.file = alloc.file;
+        leak.line = alloc.line;
+        leak.function = alloc.function;
+        leak.stack_trace = alloc.stack_trace;
+        leak.allocation_time = alloc.allocation_time;
+        leak.detection_time = leak_info.detection_time;
+        leak.thread_id = alloc.thread_id;
+        leak.allocation = alloc;
+        leak.leak_count = 1;
+        memory_leaks.push_back(leak);
+    }
+
+    return memory_leaks;
 }
 
-void MemoryLeakDetector::report_leaks() {
-    auto leaks = detect_leaks();
-    if (!leaks.empty()) {
-        LOG_WARNING("Memory leak detection found " + std::to_string(leaks.size()) + " leaks", 
-                   ErrorCategory::MEMORY);
-        for (const auto& leak : leaks) {
-            LOG_WARNING("Leak: " + leak.leak_type + " (" + std::to_string(leak.leak_size) + " bytes)", 
-                       ErrorCategory::MEMORY);
+void MemoryLeakDetector::report_leaks(const std::string& file_path) {
+    auto memory_leaks = detect_leaks();
+    if (!memory_leaks.empty()) {
+        ErrorHandler::LogWarning(ErrorCategory::MEMORY,
+            "Memory leak detection found " + std::to_string(memory_leaks.size()) + " leaks");
+        for (const auto& leak : memory_leaks) {
+            ErrorHandler::LogWarning(ErrorCategory::MEMORY,
+                "Leak: " + leak.leak_type + " (" + std::to_string(leak.leak_size) + " bytes)");
         }
     }
 }
@@ -554,10 +564,14 @@ size_t MemoryLeakDetector::get_total_leak_size() {
 }
 
 // MemoryUsageMonitor implementation
-void MemoryUsageMonitor::start_monitoring(std::chrono::milliseconds interval) {
-    check_interval_ = interval;
+void MemoryUsageMonitor::start_monitoring() {
     monitoring_enabled_.store(true);
     last_check_ = std::chrono::system_clock::now();
+}
+
+void MemoryUsageMonitor::start_monitoring(std::chrono::milliseconds interval) {
+    check_interval_ = interval;
+    start_monitoring();
 }
 
 void MemoryUsageMonitor::stop_monitoring() {

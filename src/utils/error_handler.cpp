@@ -46,12 +46,12 @@ ErrorHandler::ErrorHandler()
     
     // Set global instance
     g_error_handler = this;
-    
-    logger.info("ErrorHandler initialized successfully");
+
+    info("ErrorHandler initialized successfully");
 }
 
 ErrorHandler::~ErrorHandler() {
-    stop_monitoring();
+    stop_monitoring_.store(true);
     cleanup_log_outputs();
     g_error_handler = nullptr;
 }
@@ -79,7 +79,7 @@ void ErrorHandler::Initialize() {
 
 void ErrorHandler::Shutdown() {
     auto& handler = get_instance();
-    handler.stop_monitoring();
+    handler.stop_monitoring_.store(true);
     handler.cleanup_log_outputs();
     handler.initialized_.store(false);
 }
@@ -140,10 +140,10 @@ void ErrorHandler::report_error(const ErrorInfo& error_info) {
     
     // Format error message
     std::string formatted_message = format_error_message(error_info);
-    
+
     // Write to outputs
-    write_to_outputs(error_info, formatted_message);
-    
+    write_to_outputs(error_info);
+
     // Record history
     record_log_entry(static_cast<LogLevel>(error_info.severity), error_info.category, error_info.message);
     record_error(error_info);
@@ -263,7 +263,7 @@ size_t ErrorHandler::get_error_count(ErrorSeverity severity) const {
     std::lock_guard<std::mutex> lock(stats_mutex_);
     size_t index = static_cast<size_t>(severity);
     if (index < severity_counts_.size()) {
-        return severity_counts_[index].load();
+        return severity_counts_[index];
     }
     return 0;
 }
@@ -272,7 +272,7 @@ size_t ErrorHandler::get_error_count(ErrorCategory category) const {
     std::lock_guard<std::mutex> lock(stats_mutex_);
     size_t index = static_cast<size_t>(category);
     if (index < category_counts_.size()) {
-        return category_counts_[index].load();
+        return category_counts_[index];
     }
     return 0;
 }
@@ -284,10 +284,10 @@ size_t ErrorHandler::get_total_error_count() const {
 void ErrorHandler::reset_statistics() {
     std::lock_guard<std::mutex> lock(stats_mutex_);
     for (auto& count : severity_counts_) {
-        count.store(0);
+        count = 0;
     }
     for (auto& count : category_counts_) {
-        count.store(0);
+        count = 0;
     }
     total_error_count_.store(0);
 }
@@ -337,7 +337,7 @@ void ErrorHandler::rotate_log_files() {
     current_log_file_size_.store(0);
 }
 
-void ErrorHandler::clear_logs() {
+void ErrorHandler::ClearLogs() {
     std::lock_guard<std::mutex> lock(log_mutex_);
     for (auto& output : log_sinks_) {
         output->close();
@@ -433,24 +433,24 @@ std::string ErrorHandler::get_current_error_context() const {
 
 void ErrorHandler::initialize_log_outputs() {
     std::lock_guard<std::mutex> lock(log_mutex_);
-    
+
     LogOutput outputs = log_output_mask_.load();
-    
-    if (outputs & LogOutput::CONSOLE) {
+
+    if (static_cast<int>(outputs & LogOutput::CONSOLE) != 0) {
         log_sinks_.push_back(std::make_unique<ConsoleLogOutput>());
     }
-    
-    if (outputs & LogOutput::FILE) {
+
+    if (static_cast<int>(outputs & LogOutput::FILE) != 0) {
         if (!log_file_path_.empty()) {
             log_sinks_.push_back(std::make_unique<FileLogOutput>(log_file_path_));
         }
     }
-    
-    if (outputs & LogOutput::EVENT_LOG) {
+
+    if (static_cast<int>(outputs & LogOutput::EVENT_LOG) != 0) {
         log_sinks_.push_back(std::make_unique<EventLogOutput>());
     }
-    
-    if (outputs & LogOutput::DEBUGGER) {
+
+    if (static_cast<int>(outputs & LogOutput::DEBUGGER) != 0) {
         log_sinks_.push_back(std::make_unique<DebuggerLogOutput>());
     }
 }
@@ -463,8 +463,9 @@ void ErrorHandler::cleanup_log_outputs() {
     log_sinks_.clear();
 }
 
-void ErrorHandler::write_to_outputs(const ErrorInfo& error_info, const std::string& formatted_message) {
+void ErrorHandler::write_to_outputs(const ErrorInfo& error_info) {
     std::lock_guard<std::mutex> lock(log_mutex_);
+    std::string formatted_message = format_error_message(error_info);
     for (auto& output : log_sinks_) {
         try {
             output->write(error_info, formatted_message);
@@ -585,9 +586,12 @@ std::string ErrorHandler::get_timestamp_string() const {
     auto time_t = std::chrono::system_clock::to_time_t(now);
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         now.time_since_epoch()) % 1000;
-    
+
+    std::tm local_time;
+    localtime_s(&local_time, &time_t);
+
     std::stringstream ss;
-    ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+    ss << std::put_time(&local_time, "%Y-%m-%d %H:%M:%S");
     ss << "." << std::setfill('0') << std::setw(3) << ms.count();
     return ss.str();
 }
@@ -679,7 +683,7 @@ void ConsoleLogOutput::reset_console_color() {
 // FileLogOutput implementation
 FileLogOutput::FileLogOutput(const std::string& file_path)
     : file_path_(file_path), max_file_size_(10 * 1024 * 1024), max_files_(5),
-      file_handle_(INVALID_HANDLE_VALUE) {
+      file_handle_(INVALID_HANDLE_VALUE), current_log_file_size_(0) {
     open_file();
 }
 
@@ -1081,13 +1085,13 @@ ErrorStatistics ErrorHandler::get_error_statistics() const {
     if (severity_counts_.empty()) {
         return stats;
     }
-    stats.total_debug_messages = severity_counts_[static_cast<size_t>(ErrorSeverity::DEBUG)].load();
-    stats.total_info_messages = severity_counts_[static_cast<size_t>(ErrorSeverity::INFO)].load();
-    stats.total_warnings = severity_counts_[static_cast<size_t>(ErrorSeverity::WARNING)].load();
+    stats.total_debug_messages = severity_counts_[static_cast<size_t>(ErrorSeverity::DEBUG)];
+    stats.total_info_messages = severity_counts_[static_cast<size_t>(ErrorSeverity::INFO)];
+    stats.total_warnings = severity_counts_[static_cast<size_t>(ErrorSeverity::WARNING)];
     size_t error_total = 0;
-    error_total += severity_counts_[static_cast<size_t>(ErrorSeverity::ERROR)].load();
-    error_total += severity_counts_[static_cast<size_t>(ErrorSeverity::CRITICAL)].load();
-    error_total += severity_counts_[static_cast<size_t>(ErrorSeverity::FATAL)].load();
+    error_total += severity_counts_[static_cast<size_t>(ErrorSeverity::ERROR)];
+    error_total += severity_counts_[static_cast<size_t>(ErrorSeverity::CRITICAL)];
+    error_total += severity_counts_[static_cast<size_t>(ErrorSeverity::FATAL)];
     stats.total_errors = error_total;
     return stats;
 }

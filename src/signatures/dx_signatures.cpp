@@ -267,62 +267,7 @@ std::vector<SignaturePattern> GetDXSignatures() {
     }
 }
 
-// Get LockDown Browser-specific signatures
-std::vector<SignaturePattern> GetLockDownSignatures() {
-    auto timer = g_signatureMonitor.StartTimer("GetLockDownSignatures");
-    
-    try {
-        std::vector<SignaturePattern> signatures;
-        
-        // Track memory allocation for LockDown signatures
-        g_signatureMemory.TrackAllocation("LockDownSignatures", sizeof(std::vector<SignaturePattern>));
-        
-        // Example LockDown Browser anti-screen capture pattern
-        auto parsedLockDownPattern = ParsePattern(
-            "48 8B 05 ? ? ? ? 48 85 C0 74 ? 48 8B 08 48 8B 01 FF 50 ? 84 C0"
-        );
-        
-        SignaturePattern lockDownScreenCapture = {
-            "LockDownScreenCaptureCheck",
-            parsedLockDownPattern.first,
-            parsedLockDownPattern.second,
-            "LockDownBrowser.exe",
-            "Pattern for LockDown Browser screen capture detection function"
-        };
-        signatures.push_back(lockDownScreenCapture);
-        
-        // Example LockDown Browser window focus check pattern
-        auto parsedFocusPattern = ParsePattern(
-            "48 83 EC 28 FF 15 ? ? ? ? 48 85 C0 74 ? 48 83 C4 28 C3"
-        );
-        
-        SignaturePattern lockDownFocusCheck = {
-            "LockDownFocusCheck",
-            parsedFocusPattern.first,
-            parsedFocusPattern.second,
-            "LockDownBrowser.exe",
-            "Pattern for LockDown Browser window focus check function"
-        };
-        signatures.push_back(lockDownFocusCheck);
-        
-        ErrorHandler::LogInfo(ErrorCategory::SIGNATURE_PARSING,
-                            "LockDown signatures loaded successfully",
-                            {{"SignatureCount", std::to_string(signatures.size())}});
-        
-        timer.Stop();
-        g_signatureMonitor.RecordOperation("GetLockDownSignatures", timer.GetElapsedTime());
-        
-        return signatures;
-        
-    } catch (const std::exception& e) {
-        timer.Stop();
-        ErrorHandler::LogError(ErrorSeverity::ERROR, ErrorCategory::EXCEPTION,
-                             "Exception during LockDown signature loading",
-                             {{"Exception", e.what()},
-                              {"Operation", "GetLockDownSignatures"}});
-        throw;
-    }
-}
+// GetLockDownSignatures is now defined in lockdown_signatures.cpp
 
 // Get DirectX interface information
 std::unordered_map<std::string, DXInterface> GetDXInterfaces() {

@@ -490,9 +490,12 @@ std::string CrashReporter::generate_dump_filename() const {
     auto time_t = std::chrono::system_clock::to_time_t(now);
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         now.time_since_epoch()) % 1000;
-    
+
+    std::tm local_time;
+    localtime_s(&local_time, &time_t);
+
     std::ostringstream oss;
-    oss << "crash_dump_" << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
+    oss << "crash_dump_" << std::put_time(&local_time, "%Y%m%d_%H%M%S");
     oss << "_" << std::setfill('0') << std::setw(3) << ms.count() << ".dmp";
     
     if (!config_.dump_directory.empty()) {
@@ -507,9 +510,12 @@ std::string CrashReporter::generate_log_filename() const {
     auto time_t = std::chrono::system_clock::to_time_t(now);
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         now.time_since_epoch()) % 1000;
-    
+
+    std::tm local_time;
+    localtime_s(&local_time, &time_t);
+
     std::ostringstream oss;
-    oss << "crash_log_" << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
+    oss << "crash_log_" << std::put_time(&local_time, "%Y%m%d_%H%M%S");
     oss << "_" << std::setfill('0') << std::setw(3) << ms.count() << ".txt";
     
     if (!config_.log_directory.empty()) {
@@ -524,9 +530,12 @@ std::string CrashReporter::format_timestamp(
     auto time_t = std::chrono::system_clock::to_time_t(timestamp);
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         timestamp.time_since_epoch()) % 1000;
-    
+
+    std::tm local_time;
+    localtime_s(&local_time, &time_t);
+
     std::ostringstream oss;
-    oss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+    oss << std::put_time(&local_time, "%Y-%m-%d %H:%M:%S");
     oss << "." << std::setfill('0') << std::setw(3) << ms.count();
     return oss.str();
 }
@@ -588,14 +597,17 @@ namespace CrashUtils {
         OSVERSIONINFOA osvi;
         ZeroMemory(&osvi, sizeof(OSVERSIONINFOA));
         osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOA);
-        
+
+#pragma warning(push)
+#pragma warning(disable: 4996)  // Disable deprecation warning for GetVersionExA
         if (GetVersionExA(&osvi)) {
+#pragma warning(pop)
             std::ostringstream oss;
             oss << "Windows " << osvi.dwMajorVersion << "." << osvi.dwMinorVersion;
             oss << " (Build " << osvi.dwBuildNumber << ")";
             return oss.str();
         }
-        
+
         return "Unknown";
     }
     
