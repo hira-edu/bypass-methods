@@ -1,10 +1,10 @@
 #include <gtest/gtest.h>
-#include "../../include/optimization/memory_pool.h"
-#include "../../include/optimization/thread_pool.h"
-#include "../../include/optimization/performance_optimizer.h"
-#include "../../include/utils/error_handler.h"
-#include "../../include/utils/performance_monitor.h"
-#include "../../include/utils/memory_tracker.h"
+#include "optimization/memory_pool.h"
+#include "optimization/thread_pool.h"
+#include "optimization/performance_optimizer.h"
+#include "utils/error_handler.h"
+#include "utils/performance_monitor.h"
+#include "utils/memory_tracker.h"
 #include <thread>
 #include <chrono>
 #include <random>

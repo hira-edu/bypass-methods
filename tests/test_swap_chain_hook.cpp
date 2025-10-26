@@ -1,9 +1,9 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
-#include "../../include/hooks/swap_chain_hook.h"
-#include "../../include/error_handler.h"
-#include "../../include/performance_monitor.h"
-#include "../../include/memory_tracker.h"
+#include "hooks/swap_chain_hook.h"
+#include "utils/error_handler.h"
+#include "utils/performance_monitor.h"
+#include "utils/memory_tracker.h"
 #include <memory>
 #include <thread>
 #include <chrono>

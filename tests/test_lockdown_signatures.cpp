@@ -1,11 +1,11 @@
 #include <gtest/gtest.h>
 #include <vector>
 #include <string>
-#include "../../include/signatures/dx_signatures.h"
-#include "../../include/raii_wrappers.h"
-#include "../../include/error_handler.h"
-#include "../../include/memory_tracker.h"
-#include "../../include/performance_monitor.h"
+#include "signatures/dx_signatures.h"
+#include "utils/raii_wrappers.h"
+#include "utils/error_handler.h"
+#include "utils/memory_tracker.h"
+#include "utils/performance_monitor.h"
 
 using namespace UndownUnlock::DXHook::Signatures;
 

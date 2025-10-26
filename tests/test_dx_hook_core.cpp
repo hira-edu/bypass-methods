@@ -179,7 +179,7 @@ TEST_F(DXHookCoreTest, PerformanceStatistics) {
     
     // Get statistics
     auto stats = perf_monitor->get_stats();
-    EXPECT_GE(stats.total_operations, 5);
+    EXPECT_GE(stats.total_measurements, 5);
 }
 
 // Test memory leak detection

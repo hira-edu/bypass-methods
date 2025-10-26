@@ -3,11 +3,11 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
-#include "../../include/hooks/keyboard_hook.h"
-#include "../../include/raii_wrappers.h"
-#include "../../include/error_handler.h"
-#include "../../include/memory_tracker.h"
-#include "../../include/performance_monitor.h"
+#include "hooks/keyboard_hook.h"
+#include "utils/raii_wrappers.h"
+#include "utils/error_handler.h"
+#include "utils/memory_tracker.h"
+#include "utils/performance_monitor.h"
 
 using namespace UndownUnlock::WindowsHook;
 
