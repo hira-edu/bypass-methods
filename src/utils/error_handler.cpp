@@ -924,8 +924,10 @@ std::string DebuggerLogOutput::format_debug_info(const ErrorInfo& error_info) co
     return ss.str();
 }
 
+} // namespace UndownUnlock::Utils
+
 // Error utilities implementation
-namespace error_utils {
+namespace UndownUnlock::Utils::error_utils {
 
 std::string get_windows_error_message(DWORD error_code) {
     if (error_code == 0) {
@@ -994,7 +996,9 @@ ScopedErrorContext::~ScopedErrorContext() {
     ErrorHandler::get_instance().pop_error_context();
 }
 
-} // namespace error_utils
+} // namespace UndownUnlock::Utils::error_utils
+
+namespace UndownUnlock::Utils {
 
 void ErrorHandler::set_minimum_log_level(LogLevel level) {
     set_minimum_severity(static_cast<ErrorSeverity>(level));

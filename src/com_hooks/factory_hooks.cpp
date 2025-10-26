@@ -1,6 +1,8 @@
 #include "../../include/com_hooks/factory_hooks.h"
 #include "../../include/dx_hook_core.h"
 #include "../../include/hooks/com_interface_wrapper.h"
+#include <cstdint>
+#include <limits>
 #include <iostream>
 
 namespace UndownUnlock {
@@ -105,7 +107,7 @@ bool FactoryHooks::HookFactoryCreateSwapChain(IDXGIFactory* pFactory) {
     }
     
     // Replace the function pointer
-    vtable[10] = reinterpret_cast<void*>(HookFactoryCreateSwapChain);
+    vtable[10] = reinterpret_cast<void*>(FactoryCreateSwapChainHook);
     
     // Restore memory protection
     DWORD temp;
@@ -150,11 +152,21 @@ bool FactoryHooks::InstallHook(void** originalFunction, void* hookFunction, cons
     
     // Create a relative jump to our hook function
     // Format: E9 xx xx xx xx (JMP rel32)
-    DWORD relativeAddress = (DWORD)hookFunction - (DWORD)realFunc - 5;
-    
-    uint8_t* funcBytes = (uint8_t*)realFunc;
+    auto source = reinterpret_cast<uintptr_t>(realFunc);
+    auto target = reinterpret_cast<uintptr_t>(hookFunction);
+    auto displacement = static_cast<int64_t>(target - source - 5);
+
+    if (displacement < std::numeric_limits<int32_t>::min() ||
+        displacement > std::numeric_limits<int32_t>::max()) {
+        std::cerr << "Hook target too far for JMP rel32 when installing " << functionName << std::endl;
+        DWORD temp;
+        VirtualProtect(realFunc, 5, oldProtect, &temp);
+        return false;
+    }
+
+    uint8_t* funcBytes = static_cast<uint8_t*>(realFunc);
     funcBytes[0] = 0xE9; // JMP opcode
-    *(DWORD*)(&funcBytes[1]) = relativeAddress;
+    *reinterpret_cast<int32_t*>(&funcBytes[1]) = static_cast<int32_t>(displacement);
     
     // Restore the original protection
     DWORD temp;
@@ -335,7 +347,7 @@ HRESULT WINAPI FactoryHooks::HookD3D11CreateDeviceAndSwapChain(
     return hr;
 }
 
-HRESULT STDMETHODCALLTYPE FactoryHooks::HookFactoryCreateSwapChain(
+HRESULT STDMETHODCALLTYPE FactoryHooks::FactoryCreateSwapChainHook(
     IDXGIFactory* pFactory, IUnknown* pDevice, DXGI_SWAP_CHAIN_DESC* pDesc, IDXGISwapChain** ppSwapChain) {
     
     FactoryHooks& instance = GetInstance();

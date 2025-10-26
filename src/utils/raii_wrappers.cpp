@@ -452,7 +452,7 @@ EventWrapper::EventWrapper(const std::string& name, bool manual_reset, bool init
 }
 
 EventWrapper::~EventWrapper() {
-    reset();
+    reset(INVALID_HANDLE_VALUE);
 }
 
 EventWrapper::EventWrapper(EventWrapper&& other) noexcept
@@ -464,7 +464,7 @@ EventWrapper::EventWrapper(EventWrapper&& other) noexcept
 
 EventWrapper& EventWrapper::operator=(EventWrapper&& other) noexcept {
     if (this != &other) {
-        reset();
+        reset(INVALID_HANDLE_VALUE);
         event_ = other.event_;
         error_handler_ = other.error_handler_;
         event_name_ = std::move(other.event_name_);

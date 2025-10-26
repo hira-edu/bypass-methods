@@ -114,7 +114,7 @@ private:
     
     std::unordered_map<IDXGIFactory*, CreateSwapChain_t> m_originalCreateSwapChain;
     
-    static HRESULT STDMETHODCALLTYPE HookFactoryCreateSwapChain(
+    static HRESULT STDMETHODCALLTYPE FactoryCreateSwapChainHook(
         IDXGIFactory* pFactory, IUnknown* pDevice, DXGI_SWAP_CHAIN_DESC* pDesc, IDXGISwapChain** ppSwapChain);
 
     // SwapChain interface detection

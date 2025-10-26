@@ -10,6 +10,7 @@
 #include <chrono>
 #include <unordered_map>
 #include <array>
+#include <type_traits>
 #include <windows.h>
 
 #ifdef ERROR
@@ -176,6 +177,33 @@ enum class LogOutput {
     DEBUGGER = 8,
     ALL = 15
 };
+
+constexpr LogOutput operator|(LogOutput lhs, LogOutput rhs) noexcept {
+    return static_cast<LogOutput>(
+        static_cast<std::underlying_type_t<LogOutput>>(lhs) |
+        static_cast<std::underlying_type_t<LogOutput>>(rhs));
+}
+
+constexpr LogOutput operator&(LogOutput lhs, LogOutput rhs) noexcept {
+    return static_cast<LogOutput>(
+        static_cast<std::underlying_type_t<LogOutput>>(lhs) &
+        static_cast<std::underlying_type_t<LogOutput>>(rhs));
+}
+
+constexpr LogOutput operator~(LogOutput value) noexcept {
+    return static_cast<LogOutput>(
+        ~static_cast<std::underlying_type_t<LogOutput>>(value));
+}
+
+inline LogOutput& operator|=(LogOutput& lhs, LogOutput rhs) noexcept {
+    lhs = lhs | rhs;
+    return lhs;
+}
+
+inline LogOutput& operator&=(LogOutput& lhs, LogOutput rhs) noexcept {
+    lhs = lhs & rhs;
+    return lhs;
+}
 
 /**
  * Forward declarations

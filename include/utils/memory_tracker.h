@@ -17,6 +17,19 @@ namespace Utils {
 // Forward declarations
 class ErrorHandler;
 
+enum class AllocationType {
+    NEW = 0,
+    NEW_ARRAY,
+    MALLOC,
+    CALLOC,
+    REALLOC,
+    VIRTUAL_ALLOC,
+    HEAP_ALLOC,
+    WINDOWS_API,
+    DIRECTX,
+    CUSTOM
+};
+
 enum class MemoryCategory {
     GENERAL = 0,
     SYSTEM,
@@ -46,8 +59,9 @@ struct AllocationInfo {
     std::string allocation_type; // "new", "malloc", "VirtualAlloc", etc.
     bool is_array;
     size_t array_size;
+    bool is_freed;
     
-    AllocationInfo() : address(nullptr), size(0), line(0), is_array(false), array_size(0) {}
+    AllocationInfo() : address(nullptr), size(0), line(0), is_array(false), array_size(0), is_freed(false) {}
 };
 
 /**
@@ -59,9 +73,11 @@ struct MemoryStats {
     std::atomic<size_t> current_allocations;
     std::atomic<size_t> total_bytes_allocated;
     std::atomic<size_t> total_bytes_deallocated;
+    std::atomic<size_t> total_bytes_freed;
     std::atomic<size_t> current_bytes_allocated;
     std::atomic<size_t> peak_bytes_allocated;
     std::atomic<size_t> peak_allocations;
+    std::atomic<size_t> leak_count;
     std::chrono::system_clock::time_point start_time;
     std::chrono::system_clock::time_point last_allocation_time;
     std::chrono::system_clock::time_point last_deallocation_time;
@@ -72,9 +88,11 @@ struct MemoryStats {
           current_allocations(0),
           total_bytes_allocated(0),
           total_bytes_deallocated(0),
+          total_bytes_freed(0),
           current_bytes_allocated(0),
           peak_bytes_allocated(0),
-          peak_allocations(0) {}
+          peak_allocations(0),
+          leak_count(0) {}
 
     MemoryStats(const MemoryStats& other)
         : total_allocations(other.total_allocations.load()),
@@ -82,9 +100,11 @@ struct MemoryStats {
           current_allocations(other.current_allocations.load()),
           total_bytes_allocated(other.total_bytes_allocated.load()),
           total_bytes_deallocated(other.total_bytes_deallocated.load()),
+          total_bytes_freed(other.total_bytes_freed.load()),
           current_bytes_allocated(other.current_bytes_allocated.load()),
           peak_bytes_allocated(other.peak_bytes_allocated.load()),
           peak_allocations(other.peak_allocations.load()),
+          leak_count(other.leak_count.load()),
           start_time(other.start_time),
           last_allocation_time(other.last_allocation_time),
           last_deallocation_time(other.last_deallocation_time) {}
@@ -96,9 +116,11 @@ struct MemoryStats {
             current_allocations.store(other.current_allocations.load());
             total_bytes_allocated.store(other.total_bytes_allocated.load());
             total_bytes_deallocated.store(other.total_bytes_deallocated.load());
+            total_bytes_freed.store(other.total_bytes_freed.load());
             current_bytes_allocated.store(other.current_bytes_allocated.load());
             peak_bytes_allocated.store(other.peak_bytes_allocated.load());
             peak_allocations.store(other.peak_allocations.load());
+            leak_count.store(other.leak_count.load());
             start_time = other.start_time;
             last_allocation_time = other.last_allocation_time;
             last_deallocation_time = other.last_deallocation_time;

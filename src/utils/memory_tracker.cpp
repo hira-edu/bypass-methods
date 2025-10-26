@@ -1,9 +1,10 @@
-#include "../../include/utils/memory_tracker.h"
-#include "../../include/utils/error_handler.h"
+#include "utils/memory_tracker.h"
+#include "utils/error_handler.h"
 #include <sstream>
 #include <iomanip>
 #include <filesystem>
 #include <algorithm>
+#include <fstream>
 #include <dbghelp.h>
 
 namespace UndownUnlock::Utils {
@@ -150,6 +151,61 @@ void MemoryTracker::track_deallocation(void* address, AllocationType type) {
             );
         }
     }
+}
+
+AllocationHandle MemoryTracker::track_allocation(const std::string& name, size_t size, MemoryCategory category) {
+    if (name.empty() || size == 0) {
+        return 0;
+    }
+    
+    AllocationHandle id = next_allocation_id_.fetch_add(1, std::memory_order_relaxed);
+    ActiveAllocationInfo info;
+    info.id = id;
+    info.name = name;
+    info.category = category;
+    info.size = size;
+    info.timestamp = std::chrono::system_clock::now();
+    
+    {
+        std::lock_guard<std::mutex> lock(active_named_allocations_mutex_);
+        active_named_allocations_[id] = info;
+    }
+    
+    track_named_allocation(name, size);
+    return id;
+}
+
+void MemoryTracker::release_allocation(AllocationHandle handle) {
+    if (handle == 0) {
+        return;
+    }
+    
+    ActiveAllocationInfo info;
+    bool found = false;
+    {
+        std::lock_guard<std::mutex> lock(active_named_allocations_mutex_);
+        auto it = active_named_allocations_.find(handle);
+        if (it != active_named_allocations_.end()) {
+            info = it->second;
+            active_named_allocations_.erase(it);
+            found = true;
+        }
+    }
+    
+    if (!found) {
+        return;
+    }
+    
+    track_named_deallocation(info.name, info.size);
+}
+
+bool MemoryTracker::has_allocation(AllocationHandle handle) const {
+    if (handle == 0) {
+        return false;
+    }
+    
+    std::lock_guard<std::mutex> lock(active_named_allocations_mutex_);
+    return active_named_allocations_.find(handle) != active_named_allocations_.end();
 }
 
 MemoryStats MemoryTracker::get_stats() const {
