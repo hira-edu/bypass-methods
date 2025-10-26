@@ -42,8 +42,21 @@ if ($Upload) {
         }
     }
 
+    Write-Host "Ensuring release $ReleaseTag exists in $Repo..."
+    $releaseExists = $true
+    try {
+        gh release view $ReleaseTag --repo $Repo | Out-Null
+    } catch {
+        $releaseExists = $false
+    }
+
+    if (-not $releaseExists) {
+        gh release create $ReleaseTag --repo $Repo --notes "SecurityHooked $Version" | Out-Null
+        Write-Host "✔ Created release $ReleaseTag"
+    }
+
     Write-Host "Uploading $artifactPath to release $ReleaseTag in $Repo..."
-    gh release upload $ReleaseTag $artifactPath --repo $Repo --clobber
+    gh release upload $ReleaseTag $artifactPath --repo $Repo --clobber | Out-Null
     Write-Host "✔ Uploaded via GitHub CLI."
 } else {
     Write-Host "Upload skipped. Use -Upload to push to GitHub releases."
