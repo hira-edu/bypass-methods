@@ -216,10 +216,10 @@ public:
     using propagate_on_container_move_assignment = std::true_type;
     using is_always_equal = std::false_type;
     
-    explicit PoolAllocator(const std::string& type = "template") : allocation_type_(type) {}
+    explicit PoolAllocator(const std::string& type = "template") noexcept : allocation_type_(type) {}
     
     template<typename U>
-    PoolAllocator(const PoolAllocator<U>& other) : allocation_type_(other.allocation_type_) {}
+    PoolAllocator(const PoolAllocator<U>& other) noexcept : allocation_type_(other.allocation_type_) {}
     
     T* allocate(size_type n) {
         size_t size = n * sizeof(T);
