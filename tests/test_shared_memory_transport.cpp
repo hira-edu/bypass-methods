@@ -1,11 +1,13 @@
 #include <gtest/gtest.h>
 #include "shared_memory_transport.h"
+#include "frame_extractor.h"
 #include "utils/error_handler.h"
 #include "utils/performance_monitor.h"
 #include "utils/memory_tracker.h"
 #include <memory>
 #include <thread>
 #include <chrono>
+#include <dxgiformat.h>
 
 class SharedMemoryTransportTest : public ::testing::Test {
 protected:

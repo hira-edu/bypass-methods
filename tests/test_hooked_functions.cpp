@@ -413,7 +413,7 @@ TEST_F(HookedFunctionsTest, PerformanceTimingAccuracy) {
     auto end = std::chrono::high_resolution_clock::now();
     
     auto actualDuration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    auto perfStats = PerformanceMonitor::GetInstance().GetTimerStats("HookedSetClipboardData");
+    auto perfStats = UndownUnlock::Utils::PerformanceMonitor::GetInstance()->GetTimerStats("HookedSetClipboardData");
     
     // Performance monitor should record similar timing
     EXPECT_GT(perfStats.average_time, 0);
