@@ -12,6 +12,8 @@
 namespace UndownUnlock {
 namespace DXHook {
 
+using namespace UndownUnlock::Hooks;
+
 // Initialize the singleton instance
 DXHookCore* DXHookCore::s_instance = nullptr;
 
@@ -135,9 +137,9 @@ bool DXHookCore::Initialize() {
                 if (deviceWrapper) {
                     // Get the immediate context using RAII wrapper
                     ID3D11DeviceContext* context = nullptr;
-                    HRESULT hr = deviceWrapper->GetImmediateContext(&context);
+                    deviceWrapper->GetImmediateContext(&context);
                     
-                    if (SUCCEEDED(hr) && context) {
+                    if (context) {
                         // Wrap the context for automatic cleanup
                         D3D11DeviceContextWrapper contextWrapper(context, true);
                         
@@ -159,7 +161,7 @@ bool DXHookCore::Initialize() {
                         utils::ErrorHandler::GetInstance()->error(
                             "Failed to get immediate context from device",
                             utils::ErrorCategory::GRAPHICS,
-                            __FUNCTION__, __FILE__, __LINE__, hr
+                            __FUNCTION__, __FILE__, __LINE__
                         );
                     }
                 }

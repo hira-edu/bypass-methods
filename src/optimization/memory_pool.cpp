@@ -1,14 +1,49 @@
 #include "../../include/optimization/memory_pool.h"
 #include "../../include/utils/error_handler.h"
 #include "../../include/utils/performance_monitor.h"
-#include "../../include/utils/memory_tracker.h"
+#include "../../include/memory_tracker.h"
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
 #include <cstring>
-#include <zlib.h>
 
 namespace UndownUnlock::Optimization {
+
+namespace {
+MemoryPoolStats SnapshotStats(const MemoryPoolStats& source) {
+    MemoryPoolStats snapshot;
+    snapshot.total_allocations.store(source.total_allocations.load());
+    snapshot.total_deallocations.store(source.total_deallocations.load());
+    snapshot.current_allocations.store(source.current_allocations.load());
+    snapshot.total_bytes_allocated.store(source.total_bytes_allocated.load());
+    snapshot.total_bytes_deallocated.store(source.total_bytes_deallocated.load());
+    snapshot.current_bytes_allocated.store(source.current_bytes_allocated.load());
+    snapshot.peak_bytes_allocated.store(source.peak_bytes_allocated.load());
+    snapshot.peak_allocations.store(source.peak_allocations.load());
+    snapshot.pool_hits.store(source.pool_hits.load());
+    snapshot.pool_misses.store(source.pool_misses.load());
+    snapshot.hit_ratio.store(source.hit_ratio.load());
+    snapshot.start_time = source.start_time;
+    snapshot.last_cleanup_time = source.last_cleanup_time;
+    return snapshot;
+}
+
+void ResetStats(MemoryPoolStats& stats, const std::chrono::system_clock::time_point& now) {
+    stats.total_allocations.store(0);
+    stats.total_deallocations.store(0);
+    stats.current_allocations.store(0);
+    stats.total_bytes_allocated.store(0);
+    stats.total_bytes_deallocated.store(0);
+    stats.current_bytes_allocated.store(0);
+    stats.peak_bytes_allocated.store(0);
+    stats.peak_allocations.store(0);
+    stats.pool_hits.store(0);
+    stats.pool_misses.store(0);
+    stats.hit_ratio.store(0.0);
+    stats.start_time = now;
+    stats.last_cleanup_time = now;
+}
+} // namespace
 
 // Static member initialization
 MemoryPool* MemoryPool::instance_ = nullptr;
@@ -18,9 +53,10 @@ MemoryPool::MemoryPool(const MemoryPoolConfig& config)
     : config_(config), cleanup_running_(false) {
     
     // Initialize utility components
-    error_handler_ = &utils::ErrorHandler::GetInstance();
-    performance_monitor_ = &utils::PerformanceMonitor::GetInstance();
-    memory_tracker_ = &utils::MemoryTracker::GetInstance();
+    error_handler_ = utils::ErrorHandler::GetInstance();
+    performance_monitor_ = utils::PerformanceMonitor::GetInstance();
+    memory_tracker_ = &MemoryTracker::GetInstance();
+    ResetStats(stats_, std::chrono::system_clock::now());
     
     // Set error context
     utils::ErrorContext context;
@@ -42,10 +78,7 @@ MemoryPool::MemoryPool(const MemoryPoolConfig& config)
     performance_monitor_->end_operation(init_operation);
     
     // Track memory allocation for the pool
-    auto pool_allocation = memory_tracker_->track_allocation(
-        "memory_pool", config.initial_pool_size, utils::MemoryCategory::SYSTEM
-    );
-    memory_tracker_->release_allocation(pool_allocation);
+    memory_tracker_->TrackAllocation("memory_pool", config.initial_pool_size);
 }
 
 MemoryPool::~MemoryPool() {
@@ -137,10 +170,7 @@ void* MemoryPool::allocate(size_t size, size_t alignment, const std::string& typ
         update_statistics(block, true);
         
         // Track allocation
-        auto memory_allocation = memory_tracker_->track_allocation(
-            "pool_" + type, size, utils::MemoryCategory::SYSTEM
-        );
-        memory_tracker_->release_allocation(memory_allocation);
+        memory_tracker_->TrackAllocation("pool_" + type, size);
         
         error_handler_->debug(
             "Allocated " + std::to_string(size) + " bytes from pool for type: " + type,
@@ -355,7 +385,7 @@ void MemoryPool::clear() {
 MemoryPoolStats MemoryPool::get_stats() const {
     std::lock_guard<std::mutex> lock(stats_mutex_);
     
-    MemoryPoolStats current_stats = stats_;
+    MemoryPoolStats current_stats = SnapshotStats(stats_);
     
     // Calculate hit ratio
     size_t total_requests = current_stats.pool_hits.load() + current_stats.pool_misses.load();
@@ -368,8 +398,7 @@ MemoryPoolStats MemoryPool::get_stats() const {
 
 void MemoryPool::reset_stats() {
     std::lock_guard<std::mutex> lock(stats_mutex_);
-    stats_ = MemoryPoolStats();
-    stats_.start_time = std::chrono::system_clock::now();
+    ResetStats(stats_, std::chrono::system_clock::now());
 }
 
 void MemoryPool::print_stats() const {

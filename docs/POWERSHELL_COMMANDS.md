@@ -115,4 +115,24 @@ iwr "<url>" -OutFile "$env:TEMP\tool.exe"; & "$env:TEMP\tool.exe" <args>
 
 ---
 
-Use these commands as templates—swap in alternative paths, targets, or parameters as needed while keeping the single-line invocation style.
+Use these commands as templates-swap in alternative paths, targets, or parameters as needed while keeping the single-line invocation style.
+
+---
+
+## 11. Advanced Headless Config (No UI)
+
+| Scenario | One-Liner |
+| --- | --- |
+| Apply advanced defaults with UI disabled + run headless build smoke | `pwsh -NoLogo -Command "$repo=$env:BYPASS_REPO; $cfgPath=Join-Path $repo 'config.json'; $cfg=Get-Content $cfgPath -Raw | ConvertFrom-Json; if (-not ($cfg.PSObject.Properties.Name -contains 'ui')) { $cfg | Add-Member -NotePropertyName ui -NotePropertyValue (@{ enabled = $true }) }; $cfg.ui.enabled=$false; $cfg.capture.method='enhanced_capture'; $cfg.performance.monitoring=$true; $cfg.security.anti_detection.enabled=$true; $cfg | ConvertTo-Json -Depth 8 | Set-Content $cfgPath; & (Join-Path $repo 'scripts\build_windows.ps1') -SkipPrerequisites -SkipTests"` |
+| Configure + build + test Release (advanced flags) | `pwsh -NoLogo -Command "Set-Location $env:BYPASS_REPO; cmake -S . -B build-advanced -G 'Visual Studio 16 2019' -A x64 -DCMAKE_BUILD_TYPE=Release -DUNDOWNUNLOCK_ENABLE_SECURITY=ON -DUNDOWNUNLOCK_ENABLE_PERF=ON; cmake --build build-advanced --config Release --parallel; ctest --test-dir build-advanced -C Release --output-on-failure"` |
+| Package Release artifacts (zip/msi) | `pwsh -NoLogo -Command "Set-Location $env:BYPASS_REPO; cmake --build build-advanced --config Release --target package; $outDir=Join-Path $env:BYPASS_REPO 'artifacts'; if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Path $outDir | Out-Null }; Get-ChildItem build-advanced -Filter '*.zip' -Recurse | Copy-Item -Destination $outDir -Force"` |
+
+---
+
+## 12. Artifact Installation & Verification
+
+| Action | One-Liner |
+| --- | --- |
+| Download + extract latest release | `pwsh -NoLogo -Command "Set-Location $env:BYPASS_REPO; $zip='$env:TEMP\undownunlock_release.zip'; iwr 'https://github.com/your-org/bypass-methods/releases/latest/download/windows-build-artifacts.zip' -OutFile $zip; Expand-Archive $zip -DestinationPath '.\artifacts\latest' -Force"` |
+| Install release binaries into Program Files | `pwsh -NoLogo -Command "$src='$env:BYPASS_REPO\artifacts\latest\bin'; $dst='$env:ProgramFiles\UndownUnlock'; if (-not (Test-Path $dst)) { New-Item -ItemType Directory -Path $dst | Out-Null }; Copy-Item $src\* $dst -Recurse -Force"` |
+| Verify installed version | `pwsh -NoLogo -Command "& '$env:ProgramFiles\UndownUnlock\undownunlock.exe' --version"` |

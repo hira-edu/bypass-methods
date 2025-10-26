@@ -200,7 +200,6 @@ bool SharedMemoryTransport::Initialize() {
                 utils::ErrorCategory::SYSTEM,
                 __FUNCTION__, __FILE__, __LINE__
             );
-    }
         } else {
             // Map the existing shared memory
             m_mappedAddress = MapViewOfFile(

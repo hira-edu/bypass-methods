@@ -11,6 +11,8 @@
 namespace UndownUnlock {
 namespace DXHook {
 
+using namespace UndownUnlock::Hooks;
+
 // Static instance for callback from static hook methods
 SwapChainHook* SwapChainHook::s_instance = nullptr;
 

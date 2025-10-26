@@ -71,6 +71,7 @@ add_executable(UndownUnlockTestClient ${TEST_CLIENT_SOURCES})
 
 # Link targets with dependencies
 target_link_libraries(UndownUnlockTestClient PRIVATE
+    UndownUnlockDXHook
     UndownUnlockDependencies
 )
 

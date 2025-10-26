@@ -11,12 +11,19 @@
 #include <functional>
 #include <algorithm>
 
-namespace UndownUnlock::Optimization {
-
-// Forward declarations
+namespace UndownUnlock {
+namespace Utils {
 class ErrorHandler;
 class PerformanceMonitor;
+}
 class MemoryTracker;
+}
+
+namespace UndownUnlock::Optimization {
+
+using ::UndownUnlock::Utils::ErrorHandler;
+using ::UndownUnlock::Utils::PerformanceMonitor;
+using ::UndownUnlock::MemoryTracker;
 class MemoryPool;
 class ThreadPool;
 

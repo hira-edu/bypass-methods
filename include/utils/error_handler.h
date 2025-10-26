@@ -4,9 +4,12 @@
 #include <functional>
 #include <memory>
 #include <vector>
+#include <deque>
 #include <mutex>
 #include <atomic>
 #include <chrono>
+#include <unordered_map>
+#include <array>
 #include <windows.h>
 
 #ifdef ERROR
@@ -14,6 +17,9 @@
 #endif
 #ifdef DEBUG
 #undef DEBUG
+#endif
+#ifdef EXCEPTION
+#undef EXCEPTION
 #endif
 
 
@@ -52,7 +58,13 @@ enum class ErrorCategory {
     WINDOWS_API = 13,
     COM = 14,
     DIRECTX = 15,
-    UNKNOWN = 16
+    UNKNOWN = 16,
+    FILE_SYSTEM = 17,
+    DEPENDENCY = 18,
+    SIGNATURE_PARSING = 19,
+    PROCESS = 20,
+    EXCEPTION = 21,
+    INVALID_PARAMETER = 22
 };
 
 /**
@@ -73,6 +85,72 @@ struct ErrorInfo {
     
     ErrorInfo() : severity(ErrorSeverity::INFO), category(ErrorCategory::GENERAL), 
                   line(0), windows_error(0) {}
+};
+
+/**
+ * Structured error context used for attaching metadata to logs/errors.
+ */
+class ErrorContext {
+public:
+    void set(const std::string& key, const std::string& value);
+    std::string get(const std::string& key) const;
+    void remove(const std::string& key);
+    void clear();
+    bool empty() const;
+    std::string serialize() const;
+    
+private:
+    std::unordered_map<std::string, std::string> entries_;
+};
+
+/**
+ * Log level abstraction compatible with legacy APIs.
+ */
+enum class LogLevel {
+    DEBUG = 0,
+    INFO = 1,
+    WARNING = 2,
+    ERROR = 3,
+    CRITICAL = 4,
+    FATAL = 5
+};
+
+/**
+ * Lightweight log entry exposed to tests and legacy hooks.
+ */
+struct LogEntry {
+    LogLevel level;
+    ErrorCategory category;
+    std::string component;
+    std::string message;
+    std::chrono::system_clock::time_point timestamp;
+    std::string thread_id;
+    std::string context;
+};
+
+/**
+ * Snapshot of recorded error contexts.
+ */
+struct ContextSnapshot {
+    std::string name;
+    std::string details;
+    std::chrono::system_clock::time_point timestamp;
+};
+
+/**
+ * Aggregated statistics returned by get_error_statistics().
+ */
+struct ErrorStatistics {
+    size_t total_errors;
+    size_t total_warnings;
+    size_t total_info_messages;
+    size_t total_debug_messages;
+    
+    ErrorStatistics()
+        : total_errors(0),
+          total_warnings(0),
+          total_info_messages(0),
+          total_debug_messages(0) {}
 };
 
 /**
@@ -115,6 +193,10 @@ class DebuggerLogOutput;
 class ErrorHandler {
 public:
     static ErrorHandler& get_instance();
+    static void Initialize();
+    static void Shutdown();
+    static ErrorHandler* GetInstance();
+    static bool IsInitialized();
     
     // Error reporting
     void report_error(ErrorSeverity severity, ErrorCategory category, 
@@ -131,7 +213,8 @@ public:
               const std::string& function = "", const std::string& file = "", int line = 0);
     
     void warning(const std::string& message, ErrorCategory category = ErrorCategory::GENERAL,
-                 const std::string& function = "", const std::string& file = "", int line = 0);
+                 const std::string& function = "", const std::string& file = "", int line = 0,
+                 DWORD windows_error = 0);
     
     void error(const std::string& message, ErrorCategory category = ErrorCategory::GENERAL,
                const std::string& function = "", const std::string& file = "", int line = 0,
@@ -154,6 +237,8 @@ public:
     void set_include_stack_trace(bool include);
     void set_include_timestamp(bool include);
     void set_include_thread_info(bool include);
+    void set_minimum_log_level(LogLevel level);
+    void set_console_output_enabled(bool enabled);
     
     // Recovery strategies
     void set_recovery_strategy(ErrorSeverity severity, RecoveryStrategy strategy);
@@ -172,7 +257,11 @@ public:
     // Log management
     void flush_logs();
     void rotate_log_files();
-    void clear_logs();
+    void ClearLogs();
+    std::vector<LogEntry> GetLogs() const;
+    std::vector<ErrorInfo> GetErrors() const;
+    ErrorStatistics get_error_statistics() const;
+    ErrorStatistics GetErrorStatistics() const { return get_error_statistics(); }
     
     // Utility methods
     std::string severity_to_string(ErrorSeverity severity) const;
@@ -180,19 +269,56 @@ public:
     std::string get_stack_trace() const;
     std::string get_thread_id() const;
     std::string get_process_id() const;
+    bool is_initialized() const { return initialized_.load(); }
+    bool is_console_output_enabled() const { return console_output_enabled_.load(); }
     
     // Windows error utilities
     std::string get_windows_error_message(DWORD error_code) const;
     std::string get_last_windows_error_message() const;
     
     // Error context
+    class ContextGuard;
+    ContextGuard CreateContext(const std::string& name, const ErrorContext& context = ErrorContext());
+    std::vector<ContextSnapshot> GetContexts() const;
+    void set_error_context(const ErrorContext& context);
+    void clear_error_context();
+    ErrorContext get_error_context() const;
     void push_error_context(const std::string& context);
     void pop_error_context();
     std::string get_current_error_context() const;
+    
+    // Convenience logging APIs
+    void LogInfo(const std::string& component, const std::string& message);
+    void LogWarning(const std::string& component, const std::string& message);
+    void LogError(const std::string& component, const std::string& message,
+                  ErrorSeverity severity = ErrorSeverity::ERROR,
+                  ErrorCategory category = ErrorCategory::GENERAL,
+                  DWORD windows_error = 0);
+    static void LogInfo(ErrorCategory category, const std::string& message);
+    static void LogWarning(ErrorCategory category, const std::string& message);
+    static void LogError(ErrorSeverity severity, ErrorCategory category,
+                         const std::string& message, DWORD windows_error = 0);
 
 private:
     ErrorHandler();
     ~ErrorHandler();
+
+    class ContextGuard {
+    public:
+        ContextGuard(ErrorHandler& handler, std::string name, ErrorContext context);
+        ContextGuard(ContextGuard&& other) noexcept;
+        ContextGuard& operator=(ContextGuard&& other) noexcept;
+        ~ContextGuard();
+        
+        ContextGuard(const ContextGuard&) = delete;
+        ContextGuard& operator=(const ContextGuard&) = delete;
+    
+    private:
+        ErrorHandler* handler_;
+        std::string name_;
+        ErrorContext context_;
+        bool active_;
+    };
     
     // Delete copy semantics
     ErrorHandler(const ErrorHandler&) = delete;
@@ -206,6 +332,11 @@ private:
     std::string format_error_message(const ErrorInfo& error_info) const;
     std::string get_timestamp_string() const;
     void check_log_rotation();
+    void record_log_entry(LogLevel level, ErrorCategory category, const std::string& message);
+    void record_error(const ErrorInfo& error_info);
+    void record_context(const std::string& name, const ErrorContext& context);
+    void push_context_frame(const std::string& name, const ErrorContext& context);
+    void pop_context_frame();
     
     // Member variables
     std::atomic<ErrorSeverity> minimum_severity_;
@@ -236,9 +367,21 @@ private:
     // Error context stack
     mutable std::mutex context_mutex_;
     std::vector<std::string> error_context_stack_;
+    std::vector<std::pair<std::string, ErrorContext>> context_frames_;
+    std::vector<ContextSnapshot> context_history_;
+    ErrorContext current_context_;
     
-    // Current log file size
+    // History buffers
+    mutable std::mutex history_mutex_;
+    std::deque<LogEntry> log_history_;
+    std::deque<ErrorInfo> error_history_;
+    size_t max_history_size_;
+    
+    // Current log file size and flags
+    std::atomic<bool> stop_monitoring_;
     std::atomic<size_t> current_log_file_size_;
+    std::atomic<bool> console_output_enabled_;
+    std::atomic<bool> initialized_;
 };
 
 /**
@@ -409,6 +552,41 @@ namespace error_utils {
 
 } // namespace Utils
 } // namespace UndownUnlock
+
+#ifndef LOG_INFO
+#define LOG_INFO(message, category) \
+    ::UndownUnlock::Utils::ErrorHandler::LogInfo((category), (message))
+#endif
+
+#ifndef LOG_WARNING
+#define LOG_WARNING(message, category) \
+    ::UndownUnlock::Utils::ErrorHandler::LogWarning((category), (message))
+#endif
+
+#ifndef LOG_ERROR
+#define LOG_ERROR(message, category) \
+    ::UndownUnlock::Utils::ErrorHandler::LogError( \
+        ::UndownUnlock::Utils::ErrorSeverity::ERROR, (category), (message))
+#endif
+
+#ifndef LOG_WINDOWS_ERROR
+#define LOG_WINDOWS_ERROR(message, category)                                      \
+    ::UndownUnlock::Utils::ErrorHandler::LogError(                                \
+        ::UndownUnlock::Utils::ErrorSeverity::ERROR, (category), (message),       \
+        ::GetLastError())
+#endif
+
+#ifndef UNDOWNUNLOCK_GLOBAL_ERROR_HANDLER_ALIAS
+#define UNDOWNUNLOCK_GLOBAL_ERROR_HANDLER_ALIAS
+using ErrorHandler = UndownUnlock::Utils::ErrorHandler;
+using ErrorSeverity = UndownUnlock::Utils::ErrorSeverity;
+using ErrorCategory = UndownUnlock::Utils::ErrorCategory;
+using ErrorContext = UndownUnlock::Utils::ErrorContext;
+using LogLevel = UndownUnlock::Utils::LogLevel;
+using LogEntry = UndownUnlock::Utils::LogEntry;
+using ContextSnapshot = UndownUnlock::Utils::ContextSnapshot;
+using ErrorStatistics = UndownUnlock::Utils::ErrorStatistics;
+#endif
 
 #ifndef UNDOWNUNLOCK_UTILS_NAMESPACE_ALIAS_DEFINED
 #define UNDOWNUNLOCK_UTILS_NAMESPACE_ALIAS_DEFINED

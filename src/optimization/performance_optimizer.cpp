@@ -3,15 +3,29 @@
 #include "../../include/optimization/thread_pool.h"
 #include "../../include/utils/error_handler.h"
 #include "../../include/utils/performance_monitor.h"
-#include "../../include/utils/memory_tracker.h"
+#include "../../include/memory_tracker.h"
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
 #include <intrin.h>
+#if !defined(_MSC_VER)
+#include <cpuid.h>
+#endif
+#include <numeric>
 #include <psapi.h>
 #include <pdh.h>
 
 namespace UndownUnlock::Optimization {
+
+namespace {
+inline void QueryCpuIdLeaf(int cpu_info[4], int function_id, int subfunction) {
+#if defined(_MSC_VER)
+    __cpuidex(cpu_info, function_id, subfunction);
+#else
+    __cpuid_count(function_id, subfunction, cpu_info[0], cpu_info[1], cpu_info[2], cpu_info[3]);
+#endif
+}
+} // namespace
 
 // Static member initialization
 PerformanceOptimizer* PerformanceOptimizer::instance_ = nullptr;
@@ -22,9 +36,9 @@ PerformanceOptimizer::PerformanceOptimizer(const PerformanceOptimizerConfig& con
       optimization_count_(0), current_quality_level_(1.0) {
     
     // Initialize utility components
-    error_handler_ = &utils::ErrorHandler::GetInstance();
-    performance_monitor_ = &utils::PerformanceMonitor::GetInstance();
-    memory_tracker_ = &utils::MemoryTracker::GetInstance();
+    error_handler_ = utils::ErrorHandler::GetInstance();
+    performance_monitor_ = utils::PerformanceMonitor::GetInstance();
+    memory_tracker_ = &MemoryTracker::GetInstance();
     memory_pool_ = &MemoryPool::get_instance();
     thread_pool_ = &ThreadPool::get_instance();
     
@@ -45,10 +59,7 @@ PerformanceOptimizer::PerformanceOptimizer(const PerformanceOptimizerConfig& con
     performance_monitor_->end_operation(init_operation);
     
     // Track memory allocation for the optimizer
-    auto optimizer_allocation = memory_tracker_->track_allocation(
-        "performance_optimizer", sizeof(PerformanceOptimizer), utils::MemoryCategory::SYSTEM
-    );
-    memory_tracker_->release_allocation(optimizer_allocation);
+    memory_tracker_->TrackAllocation("performance_optimizer", sizeof(PerformanceOptimizer));
     
     // Detect hardware capabilities
     detect_hardware_capabilities();
@@ -423,7 +434,9 @@ void PerformanceOptimizer::detect_hardware_capabilities() {
     __cpuid(cpu_info, 1);
     
     hardware_capabilities_.has_avx = (cpu_info[2] & (1 << 28)) != 0;
-    hardware_capabilities_.has_avx2 = false; // Would need to check with __cpuid_count
+    int cpu_info_ext[4] = {0};
+    QueryCpuIdLeaf(cpu_info_ext, 7, 0);
+    hardware_capabilities_.has_avx2 = (cpu_info_ext[1] & (1 << 5)) != 0;
     
     // Get CPU information
     SYSTEM_INFO sys_info;
@@ -655,7 +668,7 @@ void PerformanceOptimizer::optimize_thread_usage() {
     if (current_metrics_.queued_tasks > 20) {
         target_threads = std::min(config_.enabled_strategies.size(), current_threads + 2);
     } else if (current_metrics_.queued_tasks < 5 && current_threads > 2) {
-        target_threads = std::max(2ul, current_threads - 1);
+        target_threads = std::max<size_t>(2, current_threads - 1);
     }
     
     if (target_threads != current_threads) {
@@ -752,13 +765,13 @@ namespace HardwareAccelerationUtils {
     
     bool has_avx2_support() {
         int cpu_info[4];
-        __cpuid_count(cpu_info, 7, 0);
+        QueryCpuIdLeaf(cpu_info, 7, 0);
         return (cpu_info[1] & (1 << 5)) != 0;
     }
     
     bool has_avx512_support() {
         int cpu_info[4];
-        __cpuid_count(cpu_info, 7, 0);
+        QueryCpuIdLeaf(cpu_info, 7, 0);
         return (cpu_info[1] & (1 << 16)) != 0;
     }
     

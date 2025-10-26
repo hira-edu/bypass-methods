@@ -11,12 +11,19 @@
 #include <algorithm>
 #include <cassert>
 
-namespace UndownUnlock::Optimization {
-
-// Forward declarations
+namespace UndownUnlock {
+namespace Utils {
 class ErrorHandler;
 class PerformanceMonitor;
+}
 class MemoryTracker;
+}
+
+namespace UndownUnlock::Optimization {
+
+using ::UndownUnlock::Utils::ErrorHandler;
+using ::UndownUnlock::Utils::PerformanceMonitor;
+using ::UndownUnlock::MemoryTracker;
 
 /**
  * Memory pool configuration
@@ -68,9 +75,52 @@ struct MemoryPoolStats {
     std::chrono::system_clock::time_point start_time;
     std::chrono::system_clock::time_point last_cleanup_time;
     
-    MemoryPoolStats() : total_allocations(0), total_deallocations(0), current_allocations(0),
-                       total_bytes_allocated(0), total_bytes_deallocated(0), current_bytes_allocated(0),
-                       peak_bytes_allocated(0), peak_allocations(0), pool_hits(0), pool_misses(0), hit_ratio(0.0) {}
+    MemoryPoolStats()
+        : total_allocations(0),
+          total_deallocations(0),
+          current_allocations(0),
+          total_bytes_allocated(0),
+          total_bytes_deallocated(0),
+          current_bytes_allocated(0),
+          peak_bytes_allocated(0),
+          peak_allocations(0),
+          pool_hits(0),
+          pool_misses(0),
+          hit_ratio(0.0) {}
+
+    MemoryPoolStats(const MemoryPoolStats& other)
+        : total_allocations(other.total_allocations.load()),
+          total_deallocations(other.total_deallocations.load()),
+          current_allocations(other.current_allocations.load()),
+          total_bytes_allocated(other.total_bytes_allocated.load()),
+          total_bytes_deallocated(other.total_bytes_deallocated.load()),
+          current_bytes_allocated(other.current_bytes_allocated.load()),
+          peak_bytes_allocated(other.peak_bytes_allocated.load()),
+          peak_allocations(other.peak_allocations.load()),
+          pool_hits(other.pool_hits.load()),
+          pool_misses(other.pool_misses.load()),
+          hit_ratio(other.hit_ratio.load()),
+          start_time(other.start_time),
+          last_cleanup_time(other.last_cleanup_time) {}
+
+    MemoryPoolStats& operator=(const MemoryPoolStats& other) {
+        if (this != &other) {
+            total_allocations.store(other.total_allocations.load());
+            total_deallocations.store(other.total_deallocations.load());
+            current_allocations.store(other.current_allocations.load());
+            total_bytes_allocated.store(other.total_bytes_allocated.load());
+            total_bytes_deallocated.store(other.total_bytes_deallocated.load());
+            current_bytes_allocated.store(other.current_bytes_allocated.load());
+            peak_bytes_allocated.store(other.peak_bytes_allocated.load());
+            peak_allocations.store(other.peak_allocations.load());
+            pool_hits.store(other.pool_hits.load());
+            pool_misses.store(other.pool_misses.load());
+            hit_ratio.store(other.hit_ratio.load());
+            start_time = other.start_time;
+            last_cleanup_time = other.last_cleanup_time;
+        }
+        return *this;
+    }
 };
 
 /**
@@ -80,6 +130,8 @@ class MemoryPool {
 public:
     explicit MemoryPool(const MemoryPoolConfig& config = MemoryPoolConfig());
     ~MemoryPool();
+    MemoryPool(const MemoryPool&) = delete;
+    MemoryPool& operator=(const MemoryPool&) = delete;
     
     // Singleton access
     static MemoryPool& get_instance();

@@ -2,6 +2,7 @@
 
 #include <windows.h>
 #include <string>
+#include <cstdint>
 #include <memory>
 #include <vector>
 #include <unordered_map>
@@ -15,6 +16,20 @@ namespace Utils {
 
 // Forward declarations
 class ErrorHandler;
+
+enum class MemoryCategory {
+    GENERAL = 0,
+    SYSTEM,
+    GRAPHICS,
+    AUDIO,
+    NETWORK,
+    STORAGE,
+    CACHE,
+    TEMPORARY,
+    OTHER
+};
+
+using AllocationHandle = uint64_t;
 
 /**
  * Memory allocation information
@@ -112,6 +127,22 @@ struct LeakInfo {
     LeakInfo() : total_leak_count(0), total_leak_bytes(0) {}
 };
 
+struct NamedAllocationRecord {
+    std::string name;
+    size_t current_bytes{0};
+    size_t peak_bytes{0};
+    size_t total_allocated{0};
+    size_t total_deallocated{0};
+    size_t allocation_events{0};
+    size_t deallocation_events{0};
+    std::chrono::system_clock::time_point last_allocation{};
+    std::chrono::system_clock::time_point last_deallocation{};
+    
+    bool is_active() const {
+        return current_bytes > 0;
+    }
+};
+
 /**
  * Memory tracking configuration
  */
@@ -145,6 +176,11 @@ struct MemoryTrackerConfig {
 class MemoryTracker {
 public:
     static MemoryTracker& get_instance();
+    static MemoryTracker* GetInstance();
+    static void Initialize();
+    static void Initialize(const MemoryTrackerConfig& config);
+    static void Shutdown();
+    static bool IsInitialized();
     
     // Configuration
     void set_config(const MemoryTrackerConfig& config);
@@ -184,10 +220,15 @@ public:
                            const std::string& function = "");
     
     void track_heap_free(void* address);
+
+    AllocationHandle track_allocation(const std::string& name, size_t size, MemoryCategory category);
+    void release_allocation(AllocationHandle handle);
+    bool has_allocation(AllocationHandle handle) const;
     
     // Statistics
     MemoryStats get_stats() const;
     void reset_stats();
+    void Reset();
     size_t get_current_allocation_count() const;
     size_t get_current_byte_count() const;
     size_t get_peak_allocation_count() const;
@@ -198,6 +239,7 @@ public:
     bool has_leaks() const;
     size_t get_leak_count() const;
     size_t get_leak_byte_count() const;
+    bool is_initialized() const;
     
     // Reporting
     void generate_report(const std::string& file_path = "");
@@ -255,7 +297,26 @@ public:
     
     FragmentationInfo analyze_fragmentation() const;
 
+    // Named allocation tracking
+    void track_named_allocation(const std::string& name, size_t size);
+    void track_named_deallocation(const std::string& name, size_t size = 0);
+    std::vector<NamedAllocationRecord> get_named_allocations() const;
+    std::vector<NamedAllocationRecord> get_active_named_allocations() const;
+    size_t get_total_named_bytes() const;
+
 private:
+    struct ActiveAllocationInfo {
+        AllocationHandle id;
+        std::string name;
+        MemoryCategory category;
+        size_t size;
+        std::chrono::system_clock::time_point timestamp;
+    };
+
+    static MemoryTracker* instance_;
+    static std::mutex instance_mutex_;
+    static std::atomic<bool> initialized_;
+
     MemoryTracker();
     ~MemoryTracker();
     
@@ -286,6 +347,7 @@ private:
     std::atomic<bool> monitoring_;
     
     std::unordered_map<void*, AllocationInfo> allocations_;
+    std::unordered_map<std::string, std::vector<AllocationInfo>> allocations_by_type_;
     mutable std::mutex allocations_mutex_;
     
     MemoryStats stats_;
@@ -311,7 +373,19 @@ private:
     // Performance tracking
     std::chrono::system_clock::time_point last_leak_check_;
     std::atomic<size_t> allocation_count_since_last_check_;
+    std::atomic<size_t> allocation_count_{0};
+    std::atomic<size_t> deallocation_count_{0};
+
+    // Named allocation tracking
+    std::unordered_map<std::string, NamedAllocationRecord> named_allocations_;
+    mutable std::mutex named_allocations_mutex_;
+    std::atomic<size_t> total_named_bytes_{0};
+    std::unordered_map<AllocationHandle, ActiveAllocationInfo> active_named_allocations_;
+    mutable std::mutex active_named_allocations_mutex_;
+    std::atomic<AllocationHandle> next_allocation_id_{1};
 };
+
+using MemoryTrackingConfig = MemoryTrackerConfig;
 
 /**
  * RAII wrapper for automatic memory tracking

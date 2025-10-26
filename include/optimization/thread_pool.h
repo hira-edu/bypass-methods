@@ -14,12 +14,19 @@
 #include <chrono>
 #include <unordered_map>
 
-namespace UndownUnlock::Optimization {
-
-// Forward declarations
+namespace UndownUnlock {
+namespace Utils {
 class ErrorHandler;
 class PerformanceMonitor;
+}
 class MemoryTracker;
+}
+
+namespace UndownUnlock::Optimization {
+
+using ::UndownUnlock::Utils::ErrorHandler;
+using ::UndownUnlock::Utils::PerformanceMonitor;
+using ::UndownUnlock::MemoryTracker;
 
 /**
  * Task priority levels
@@ -99,10 +106,55 @@ struct ThreadPoolStats {
     std::chrono::system_clock::time_point start_time;
     std::chrono::system_clock::time_point last_task_time;
     
-    ThreadPoolStats() : total_tasks_submitted(0), total_tasks_completed(0), total_tasks_failed(0),
-                       total_tasks_cancelled(0), current_tasks_queued(0), current_tasks_running(0),
-                       current_threads_active(0), current_threads_idle(0), peak_threads_active(0),
-                       peak_queue_size(0), average_task_duration_ms(0.0), throughput_tasks_per_second(0.0) {}
+    ThreadPoolStats()
+        : total_tasks_submitted(0),
+          total_tasks_completed(0),
+          total_tasks_failed(0),
+          total_tasks_cancelled(0),
+          current_tasks_queued(0),
+          current_tasks_running(0),
+          current_threads_active(0),
+          current_threads_idle(0),
+          peak_threads_active(0),
+          peak_queue_size(0),
+          average_task_duration_ms(0.0),
+          throughput_tasks_per_second(0.0) {}
+
+    ThreadPoolStats(const ThreadPoolStats& other)
+        : total_tasks_submitted(other.total_tasks_submitted.load()),
+          total_tasks_completed(other.total_tasks_completed.load()),
+          total_tasks_failed(other.total_tasks_failed.load()),
+          total_tasks_cancelled(other.total_tasks_cancelled.load()),
+          current_tasks_queued(other.current_tasks_queued.load()),
+          current_tasks_running(other.current_tasks_running.load()),
+          current_threads_active(other.current_threads_active.load()),
+          current_threads_idle(other.current_threads_idle.load()),
+          peak_threads_active(other.peak_threads_active.load()),
+          peak_queue_size(other.peak_queue_size.load()),
+          average_task_duration_ms(other.average_task_duration_ms.load()),
+          throughput_tasks_per_second(other.throughput_tasks_per_second.load()),
+          start_time(other.start_time),
+          last_task_time(other.last_task_time) {}
+
+    ThreadPoolStats& operator=(const ThreadPoolStats& other) {
+        if (this != &other) {
+            total_tasks_submitted.store(other.total_tasks_submitted.load());
+            total_tasks_completed.store(other.total_tasks_completed.load());
+            total_tasks_failed.store(other.total_tasks_failed.load());
+            total_tasks_cancelled.store(other.total_tasks_cancelled.load());
+            current_tasks_queued.store(other.current_tasks_queued.load());
+            current_tasks_running.store(other.current_tasks_running.load());
+            current_threads_active.store(other.current_threads_active.load());
+            current_threads_idle.store(other.current_threads_idle.load());
+            peak_threads_active.store(other.peak_threads_active.load());
+            peak_queue_size.store(other.peak_queue_size.load());
+            average_task_duration_ms.store(other.average_task_duration_ms.load());
+            throughput_tasks_per_second.store(other.throughput_tasks_per_second.load());
+            start_time = other.start_time;
+            last_task_time = other.last_task_time;
+        }
+        return *this;
+    }
 };
 
 /**
@@ -138,6 +190,8 @@ class ThreadPool {
 public:
     explicit ThreadPool(const ThreadPoolConfig& config = ThreadPoolConfig());
     ~ThreadPool();
+    ThreadPool(const ThreadPool&) = delete;
+    ThreadPool& operator=(const ThreadPool&) = delete;
     
     // Singleton access
     static ThreadPool& get_instance();
@@ -190,7 +244,7 @@ private:
     void update_statistics(const TaskInfo& task_info, bool is_completion);
     void cleanup_completed_tasks();
     void adjust_thread_count();
-    std::string generate_task_id() const;
+    std::string generate_task_id();
     void log_task_event(const std::string& task_id, const std::string& event, const std::string& details = "");
     
     // Member variables

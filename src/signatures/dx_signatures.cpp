@@ -5,6 +5,13 @@
 #include "../../include/performance_monitor.h"
 #include <iostream>
 #include <dxgi.h>
+#include <dxgi1_2.h>
+#include <dxgi1_3.h>
+#include <dxgi1_4.h>
+#include <dxgi1_5.h>
+#include <dxgi1_2.h>
+#include <dxgi1_3.h>
+#include <dxgi1_4.h>
 #include <d3d11.h>
 #include <iomanip>
 #include <sstream>

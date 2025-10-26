@@ -22,8 +22,11 @@ ErrorHandler::ErrorHandler()
       include_stack_trace_(true),
       include_timestamp_(true),
       include_thread_info_(true),
+      stop_monitoring_(false),
+      max_history_size_(1024),
       current_log_file_size_(0),
-      stop_monitoring_(false) {
+      console_output_enabled_(true),
+      initialized_(true) {
     
     // Initialize statistics vectors
     severity_counts_.resize(6, 0); // DEBUG, INFO, WARNING, ERROR, CRITICAL, FATAL
@@ -56,6 +59,37 @@ ErrorHandler::~ErrorHandler() {
 ErrorHandler& ErrorHandler::get_instance() {
     static ErrorHandler instance;
     return instance;
+}
+
+void ErrorHandler::Initialize() {
+    auto& handler = get_instance();
+    {
+        std::lock_guard<std::mutex> lock(handler.config_mutex_);
+        handler.reset_statistics();
+        handler.ClearLogs();
+        handler.context_history_.clear();
+        handler.context_frames_.clear();
+        handler.error_context_stack_.clear();
+        handler.current_context_.clear();
+        handler.cleanup_log_outputs();
+        handler.initialize_log_outputs();
+    }
+    handler.initialized_.store(true);
+}
+
+void ErrorHandler::Shutdown() {
+    auto& handler = get_instance();
+    handler.stop_monitoring();
+    handler.cleanup_log_outputs();
+    handler.initialized_.store(false);
+}
+
+ErrorHandler* ErrorHandler::GetInstance() {
+    return &get_instance();
+}
+
+bool ErrorHandler::IsInitialized() {
+    return get_instance().initialized_.load();
 }
 
 void ErrorHandler::report_error(ErrorSeverity severity, ErrorCategory category,
@@ -110,6 +144,10 @@ void ErrorHandler::report_error(const ErrorInfo& error_info) {
     // Write to outputs
     write_to_outputs(error_info, formatted_message);
     
+    // Record history
+    record_log_entry(static_cast<LogLevel>(error_info.severity), error_info.category, error_info.message);
+    record_error(error_info);
+    
     // Handle recovery
     handle_recovery(error_info);
     
@@ -128,8 +166,9 @@ void ErrorHandler::info(const std::string& message, ErrorCategory category,
 }
 
 void ErrorHandler::warning(const std::string& message, ErrorCategory category,
-                          const std::string& function, const std::string& file, int line) {
-    report_error(ErrorSeverity::WARNING, category, message, function, file, line);
+                          const std::string& function, const std::string& file, int line,
+                          DWORD windows_error) {
+    report_error(ErrorSeverity::WARNING, category, message, function, file, line, windows_error);
 }
 
 void ErrorHandler::error(const std::string& message, ErrorCategory category,
@@ -367,27 +406,27 @@ std::string ErrorHandler::get_last_windows_error_message() const {
 }
 
 void ErrorHandler::push_error_context(const std::string& context) {
-    std::lock_guard<std::mutex> lock(context_mutex_);
-    error_context_stack_.push_back(context);
+    ErrorContext ctx;
+    ctx.set("context", context);
+    push_context_frame(context, ctx);
 }
 
 void ErrorHandler::pop_error_context() {
-    std::lock_guard<std::mutex> lock(context_mutex_);
-    if (!error_context_stack_.empty()) {
-        error_context_stack_.pop_back();
-    }
+    pop_context_frame();
 }
 
 std::string ErrorHandler::get_current_error_context() const {
     std::lock_guard<std::mutex> lock(context_mutex_);
-    if (error_context_stack_.empty()) {
-        return "";
-    }
-    
     std::stringstream ss;
     for (size_t i = 0; i < error_context_stack_.size(); ++i) {
         if (i > 0) ss << " > ";
         ss << error_context_stack_[i];
+    }
+    if (!current_context_.empty()) {
+        if (!error_context_stack_.empty()) {
+            ss << " | ";
+        }
+        ss << current_context_.serialize();
     }
     return ss.str();
 }
@@ -569,6 +608,9 @@ ConsoleLogOutput::~ConsoleLogOutput() {
 }
 
 void ConsoleLogOutput::write(const ErrorInfo& error_info, const std::string& formatted_message) {
+    if (g_error_handler && !g_error_handler->is_console_output_enabled()) {
+        return;
+    }
     if (use_colors_) {
         set_console_color(error_info.severity);
     }
@@ -954,4 +996,253 @@ ScopedErrorContext::~ScopedErrorContext() {
 
 } // namespace error_utils
 
+void ErrorHandler::set_minimum_log_level(LogLevel level) {
+    set_minimum_severity(static_cast<ErrorSeverity>(level));
+}
+
+void ErrorHandler::set_console_output_enabled(bool enabled) {
+    console_output_enabled_.store(enabled);
+}
+
+void ErrorHandler::LogInfo(const std::string& component, const std::string& message) {
+    info("[" + component + "] " + message, ErrorCategory::GENERAL);
+}
+
+void ErrorHandler::LogWarning(const std::string& component, const std::string& message) {
+    warning("[" + component + "] " + message, ErrorCategory::GENERAL);
+}
+
+void ErrorHandler::LogError(const std::string& component, const std::string& message,
+                            ErrorSeverity severity, ErrorCategory category,
+                            DWORD windows_error) {
+    switch (severity) {
+        case ErrorSeverity::DEBUG:
+            debug("[" + component + "] " + message, category);
+            break;
+        case ErrorSeverity::INFO:
+            info("[" + component + "] " + message, category);
+            break;
+        case ErrorSeverity::WARNING:
+            warning("[" + component + "] " + message, category);
+            break;
+        case ErrorSeverity::CRITICAL:
+            critical("[" + component + "] " + message, category,
+                     __FUNCTION__, __FILE__, __LINE__, windows_error);
+            break;
+        case ErrorSeverity::FATAL:
+            fatal("[" + component + "] " + message, category,
+                  __FUNCTION__, __FILE__, __LINE__, windows_error);
+            break;
+        case ErrorSeverity::ERROR:
+        default:
+            error("[" + component + "] " + message, category, __FUNCTION__, __FILE__, __LINE__, windows_error);
+            break;
+    }
+}
+
+void ErrorHandler::LogInfo(ErrorCategory category, const std::string& message) {
+    get_instance().info(message, category);
+}
+
+void ErrorHandler::LogWarning(ErrorCategory category, const std::string& message) {
+    get_instance().warning(message, category);
+}
+
+void ErrorHandler::LogError(ErrorSeverity severity, ErrorCategory category,
+                            const std::string& message, DWORD windows_error) {
+    switch (severity) {
+        case ErrorSeverity::DEBUG:
+            get_instance().debug(message, category);
+            break;
+        case ErrorSeverity::INFO:
+            get_instance().info(message, category);
+            break;
+        case ErrorSeverity::WARNING:
+            get_instance().warning(message, category);
+            break;
+        case ErrorSeverity::CRITICAL:
+            get_instance().critical(message, category, __FUNCTION__, __FILE__, __LINE__, windows_error);
+            break;
+        case ErrorSeverity::FATAL:
+            get_instance().fatal(message, category, __FUNCTION__, __FILE__, __LINE__, windows_error);
+            break;
+        case ErrorSeverity::ERROR:
+        default:
+            get_instance().error(message, category, __FUNCTION__, __FILE__, __LINE__, windows_error);
+            break;
+    }
+}
+ErrorStatistics ErrorHandler::get_error_statistics() const {
+    ErrorStatistics stats;
+    if (severity_counts_.empty()) {
+        return stats;
+    }
+    stats.total_debug_messages = severity_counts_[static_cast<size_t>(ErrorSeverity::DEBUG)].load();
+    stats.total_info_messages = severity_counts_[static_cast<size_t>(ErrorSeverity::INFO)].load();
+    stats.total_warnings = severity_counts_[static_cast<size_t>(ErrorSeverity::WARNING)].load();
+    size_t error_total = 0;
+    error_total += severity_counts_[static_cast<size_t>(ErrorSeverity::ERROR)].load();
+    error_total += severity_counts_[static_cast<size_t>(ErrorSeverity::CRITICAL)].load();
+    error_total += severity_counts_[static_cast<size_t>(ErrorSeverity::FATAL)].load();
+    stats.total_errors = error_total;
+    return stats;
+}
+
+std::vector<ContextSnapshot> ErrorHandler::GetContexts() const {
+    std::lock_guard<std::mutex> lock(context_mutex_);
+    return context_history_;
+}
+
+void ErrorHandler::set_error_context(const ErrorContext& context) {
+    {
+        std::lock_guard<std::mutex> lock(context_mutex_);
+        current_context_ = context;
+    }
+    record_context("SetErrorContext", context);
+}
+
+void ErrorHandler::clear_error_context() {
+    std::lock_guard<std::mutex> lock(context_mutex_);
+    current_context_.clear();
+}
+
+ErrorContext ErrorHandler::get_error_context() const {
+    std::lock_guard<std::mutex> lock(context_mutex_);
+    return current_context_;
+}
+
+ErrorHandler::ContextGuard ErrorHandler::CreateContext(const std::string& name, const ErrorContext& context) {
+    return ContextGuard(*this, name, context);
+}
+
+ErrorHandler::ContextGuard::ContextGuard(ErrorHandler& handler, std::string name, ErrorContext context)
+    : handler_(&handler), name_(std::move(name)), context_(std::move(context)), active_(true) {
+    handler_->push_context_frame(name_, context_);
+}
+
+ErrorHandler::ContextGuard::ContextGuard(ContextGuard&& other) noexcept
+    : handler_(other.handler_), name_(std::move(other.name_)), context_(std::move(other.context_)), active_(other.active_) {
+    other.handler_ = nullptr;
+    other.active_ = false;
+}
+
+ErrorHandler::ContextGuard& ErrorHandler::ContextGuard::operator=(ContextGuard&& other) noexcept {
+    if (this != &other) {
+        if (active_ && handler_) {
+            handler_->pop_context_frame();
+        }
+        handler_ = other.handler_;
+        name_ = std::move(other.name_);
+        context_ = std::move(other.context_);
+        active_ = other.active_;
+        other.handler_ = nullptr;
+        other.active_ = false;
+    }
+    return *this;
+}
+
+ErrorHandler::ContextGuard::~ContextGuard() {
+    if (active_ && handler_) {
+        handler_->pop_context_frame();
+    }
+}
+
+void ErrorHandler::record_log_entry(LogLevel level, ErrorCategory category, const std::string& message) {
+    std::string context_snapshot = get_current_error_context();
+    std::lock_guard<std::mutex> lock(history_mutex_);
+    LogEntry entry;
+    entry.level = level;
+    entry.category = category;
+    entry.component.clear();
+    entry.message = message;
+    entry.timestamp = std::chrono::system_clock::now();
+    entry.thread_id = get_thread_id();
+    entry.context = std::move(context_snapshot);
+    log_history_.push_back(std::move(entry));
+    while (log_history_.size() > max_history_size_) {
+        log_history_.pop_front();
+    }
+}
+
+void ErrorHandler::record_error(const ErrorInfo& error_info) {
+    std::lock_guard<std::mutex> lock(history_mutex_);
+    error_history_.push_back(error_info);
+    while (error_history_.size() > max_history_size_) {
+        error_history_.pop_front();
+    }
+}
+
+void ErrorHandler::record_context(const std::string& name, const ErrorContext& context) {
+    std::lock_guard<std::mutex> lock(context_mutex_);
+    context_history_.push_back({name, context.serialize(), std::chrono::system_clock::now()});
+    if (context_history_.size() > max_history_size_) {
+        context_history_.erase(context_history_.begin());
+    }
+}
+
+void ErrorHandler::push_context_frame(const std::string& name, const ErrorContext& context) {
+    {
+        std::lock_guard<std::mutex> lock(context_mutex_);
+        error_context_stack_.push_back(name);
+        context_frames_.emplace_back(name, context);
+        current_context_ = context;
+    }
+    record_context(name, context);
+}
+
+void ErrorHandler::pop_context_frame() {
+    std::lock_guard<std::mutex> lock(context_mutex_);
+    if (!error_context_stack_.empty()) {
+        error_context_stack_.pop_back();
+    }
+    if (!context_frames_.empty()) {
+        context_frames_.pop_back();
+        if (!context_frames_.empty()) {
+            current_context_ = context_frames_.back().second;
+        } else {
+            current_context_.clear();
+        }
+    } else {
+        current_context_.clear();
+    }
+}
+
+void ErrorContext::set(const std::string& key, const std::string& value) {
+    entries_[key] = value;
+}
+
+std::string ErrorContext::get(const std::string& key) const {
+    auto it = entries_.find(key);
+    return it != entries_.end() ? it->second : std::string();
+}
+
+void ErrorContext::remove(const std::string& key) {
+    entries_.erase(key);
+}
+
+void ErrorContext::clear() {
+    entries_.clear();
+}
+
+bool ErrorContext::empty() const {
+    return entries_.empty();
+}
+
+std::string ErrorContext::serialize() const {
+    if (entries_.empty()) {
+        return {};
+    }
+    std::stringstream ss;
+    bool first = true;
+    for (const auto& entry : entries_) {
+        if (!first) {
+            ss << ";";
+        }
+        first = false;
+        ss << entry.first << "=" << entry.second;
+    }
+    return ss.str();
+}
+
 } // namespace UndownUnlock::Utils
+

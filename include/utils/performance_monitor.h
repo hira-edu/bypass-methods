@@ -1,469 +1,267 @@
 #pragma once
 
 #include <windows.h>
-#include <string>
-#include <memory>
-#include <vector>
-#include <unordered_map>
-#include <mutex>
 #include <atomic>
 #include <chrono>
-#include <functional>
+#include <cstdint>
 #include <deque>
+#include <functional>
+#include <limits>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <unordered_map>
+#include <vector>
 
-namespace UndownUnlock {
-namespace Utils {
+namespace UndownUnlock::Utils {
 
-// Forward declarations
-class ErrorHandler;
-
-/**
- * Performance metric types
- */
 enum class MetricType {
     COUNTER = 0,
-    GAUGE = 1,
-    HISTOGRAM = 2,
-    TIMER = 3,
-    RATE = 4
+    GAUGE,
+    HISTOGRAM,
+    TIMER,
+    RATE
 };
 
-/**
- * Performance metric information
- */
-struct MetricInfo {
+struct TimerStats {
+    size_t sample_count{0};
+    double total_time_ms{0.0};
+    double average_time{0.0};
+    double min_time{std::numeric_limits<double>::max()};
+    double max_time{0.0};
+    std::string last_label;
+};
+
+struct PerformanceMetric {
     std::string name;
-    MetricType type;
+    std::string description;
     std::string unit;
-    std::string description;
-    std::chrono::system_clock::time_point created_time;
-    std::chrono::system_clock::time_point last_update_time;
-    bool enabled;
-    
-    MetricInfo() : type(MetricType::COUNTER), enabled(true) {}
+    MetricType type{MetricType::COUNTER};
+    double value{0.0};
+    double min_value{0.0};
+    double max_value{0.0};
+    size_t count{0};
+    double sum{0.0};
+    size_t max_samples{120};
+    std::vector<double> samples;
+    std::chrono::system_clock::time_point first_update{};
+    std::chrono::system_clock::time_point last_update{};
 };
 
-/**
- * Performance metric value
- */
-struct MetricValue {
-    double value;
-    std::chrono::system_clock::time_point timestamp;
-    std::string label;
-    
-    MetricValue() : value(0.0) {}
-    MetricValue(double val, const std::string& lbl = "") : value(val), label(lbl) {}
+struct PerformancePoint {
+    std::string name;
+    std::string context;
+    std::string thread_id;
+    std::chrono::high_resolution_clock::time_point start_time{};
+    std::chrono::high_resolution_clock::time_point end_time{};
+    bool completed{false};
 };
 
-/**
- * Performance statistics
- */
+struct OperationInfo {
+    uint64_t id{0};
+    std::string name;
+    std::string context;
+    std::thread::id thread_id;
+    std::chrono::high_resolution_clock::time_point start_time{};
+    std::chrono::high_resolution_clock::time_point end_time{};
+    bool completed{false};
+    double duration_ms{0.0};
+};
+
 struct PerformanceStats {
-    double min_value;
-    double max_value;
-    double mean_value;
-    double median_value;
-    double standard_deviation;
-    double percentile_95;
-    double percentile_99;
-    size_t sample_count;
-    std::chrono::system_clock::time_point first_sample;
-    std::chrono::system_clock::time_point last_sample;
-    
-    PerformanceStats() : min_value(0.0), max_value(0.0), mean_value(0.0), median_value(0.0),
-                        standard_deviation(0.0), percentile_95(0.0), percentile_99(0.0), sample_count(0) {}
+    std::chrono::system_clock::time_point start_time{};
+    std::chrono::system_clock::time_point end_time{};
+    size_t total_measurements{0};
+    size_t active_measurements{0};
+    double cpu_usage{0.0};
+    size_t memory_usage{0};
+    size_t thread_count{0};
+    std::unordered_map<std::string, PerformanceMetric> metrics;
+    std::vector<std::string> bottlenecks;
+    std::vector<std::string> warnings;
 };
 
-/**
- * System resource information
- */
-struct SystemResourceInfo {
-    // CPU information
-    double cpu_usage_percent;
-    double cpu_usage_per_core[64]; // Support up to 64 cores
-    size_t cpu_core_count;
-    double cpu_frequency_mhz;
-    double cpu_temperature_celsius;
-    
-    // Memory information
-    size_t total_physical_memory;
-    size_t available_physical_memory;
-    size_t used_physical_memory;
-    double memory_usage_percent;
-    size_t total_virtual_memory;
-    size_t available_virtual_memory;
-    size_t used_virtual_memory;
-    double virtual_memory_usage_percent;
-    
-    // Disk information
-    size_t total_disk_space;
-    size_t available_disk_space;
-    size_t used_disk_space;
-    double disk_usage_percent;
-    double disk_read_bytes_per_sec;
-    double disk_write_bytes_per_sec;
-    double disk_read_operations_per_sec;
-    double disk_write_operations_per_sec;
-    
-    // Network information
-    double network_bytes_received_per_sec;
-    double network_bytes_sent_per_sec;
-    double network_packets_received_per_sec;
-    double network_packets_sent_per_sec;
-    
-    // Process information
-    size_t process_memory_usage;
-    double process_cpu_usage_percent;
-    size_t process_thread_count;
-    size_t process_handle_count;
-    double process_io_read_bytes_per_sec;
-    double process_io_write_bytes_per_sec;
-    
-    // Thread information
-    size_t total_thread_count;
-    size_t active_thread_count;
-    size_t idle_thread_count;
-    
-    // Timestamp
-    std::chrono::system_clock::time_point timestamp;
-    
-    SystemResourceInfo() : cpu_usage_percent(0.0), cpu_core_count(0), cpu_frequency_mhz(0.0),
-                          cpu_temperature_celsius(0.0), total_physical_memory(0), available_physical_memory(0),
-                          used_physical_memory(0), memory_usage_percent(0.0), total_virtual_memory(0),
-                          available_virtual_memory(0), used_virtual_memory(0), virtual_memory_usage_percent(0.0),
-                          total_disk_space(0), available_disk_space(0), used_disk_space(0), disk_usage_percent(0.0),
-                          disk_read_bytes_per_sec(0.0), disk_write_bytes_per_sec(0.0), disk_read_operations_per_sec(0.0),
-                          disk_write_operations_per_sec(0.0), network_bytes_received_per_sec(0.0), network_bytes_sent_per_sec(0.0),
-                          network_packets_received_per_sec(0.0), network_packets_sent_per_sec(0.0), process_memory_usage(0),
-                          process_cpu_usage_percent(0.0), process_thread_count(0), process_handle_count(0),
-                          process_io_read_bytes_per_sec(0.0), process_io_write_bytes_per_sec(0.0), total_thread_count(0),
-                          active_thread_count(0), idle_thread_count(0) {
-        std::fill(std::begin(cpu_usage_per_core), std::end(cpu_usage_per_core), 0.0);
-    }
+struct PerformanceConfig {
+    bool track_cpu_usage{true};
+    bool track_memory_usage{true};
+    bool track_thread_usage{true};
+    size_t max_metrics{512};
+    size_t max_samples_per_metric{180};
+    std::chrono::milliseconds sampling_interval{std::chrono::seconds(1)};
+    std::function<void(const PerformanceStats&)> callback;
 };
 
-/**
- * Performance bottleneck information
- */
-struct BottleneckInfo {
-    std::string name;
-    std::string description;
-    std::string metric_name;
-    double current_value;
-    double threshold_value;
-    double severity_percent;
-    std::chrono::system_clock::time_point detection_time;
-    std::chrono::system_clock::time_point last_occurrence;
-    size_t occurrence_count;
-    bool is_active;
-    
-    BottleneckInfo() : current_value(0.0), threshold_value(0.0), severity_percent(0.0),
-                      occurrence_count(0), is_active(false) {}
-};
-
-/**
- * Performance alert information
- */
-struct PerformanceAlert {
-    std::string name;
-    std::string description;
-    std::string metric_name;
-    double value;
-    double threshold;
-    std::string severity; // "INFO", "WARNING", "ERROR", "CRITICAL"
-    std::chrono::system_clock::time_point timestamp;
-    bool acknowledged;
-    
-    PerformanceAlert() : value(0.0), threshold(0.0), acknowledged(false) {}
-};
-
-/**
- * Performance monitoring configuration
- */
-struct PerformanceMonitorConfig {
-    bool enabled;
-    std::chrono::milliseconds monitoring_interval;
-    std::chrono::milliseconds metrics_retention_period;
-    size_t max_metrics_history;
-    size_t max_alerts_history;
-    bool enable_system_monitoring;
-    bool enable_process_monitoring;
-    bool enable_thread_monitoring;
-    bool enable_disk_monitoring;
-    bool enable_network_monitoring;
-    bool enable_bottleneck_detection;
-    bool enable_alerting;
-    std::string alert_log_file;
-    bool auto_generate_reports;
-    std::string report_directory;
-    
-    PerformanceMonitorConfig() : enabled(true), monitoring_interval(std::chrono::milliseconds(1000)),
-                                metrics_retention_period(std::chrono::milliseconds(3600000)), // 1 hour
-                                max_metrics_history(10000), max_alerts_history(1000),
-                                enable_system_monitoring(true), enable_process_monitoring(true),
-                                enable_thread_monitoring(true), enable_disk_monitoring(true),
-                                enable_network_monitoring(true), enable_bottleneck_detection(true),
-                                enable_alerting(true), auto_generate_reports(true) {}
-};
-
-/**
- * Performance monitoring system
- */
 class PerformanceMonitor {
 public:
-    static PerformanceMonitor& get_instance();
-    
-    // Configuration
-    void set_config(const PerformanceMonitorConfig& config);
-    PerformanceMonitorConfig get_config() const;
-    void enable(bool enabled = true);
-    void disable();
-    bool is_enabled() const;
-    
-    // Metric management
-    void register_metric(const std::string& name, MetricType type, const std::string& unit = "",
-                        const std::string& description = "");
-    void unregister_metric(const std::string& name);
-    bool is_metric_registered(const std::string& name) const;
-    std::vector<std::string> get_registered_metrics() const;
-    
-    // Metric recording
-    void record_counter(const std::string& name, double value, const std::string& label = "");
-    void record_gauge(const std::string& name, double value, const std::string& label = "");
-    void record_histogram(const std::string& name, double value, const std::string& label = "");
-    void record_timer(const std::string& name, double duration_ms, const std::string& label = "");
-    void record_rate(const std::string& name, double rate, const std::string& label = "");
-    
-    // Timer utilities
     class ScopedTimer {
     public:
         ScopedTimer(const std::string& metric_name, const std::string& label = "");
         ~ScopedTimer();
-        
+
         ScopedTimer(const ScopedTimer&) = delete;
         ScopedTimer& operator=(const ScopedTimer&) = delete;
-        
-        void stop();
-        double get_elapsed_ms() const;
-        
+
     private:
         std::string metric_name_;
         std::string label_;
         std::chrono::high_resolution_clock::time_point start_time_;
-        bool stopped_;
     };
-    
-    // Statistics and queries
-    PerformanceStats get_metric_stats(const std::string& name, 
-                                     std::chrono::milliseconds duration = std::chrono::milliseconds(0)) const;
-    std::vector<MetricValue> get_metric_history(const std::string& name, 
-                                               std::chrono::milliseconds duration = std::chrono::milliseconds(0)) const;
-    double get_metric_current_value(const std::string& name) const;
-    double get_metric_average(const std::string& name, 
-                             std::chrono::milliseconds duration = std::chrono::milliseconds(0)) const;
-    double get_metric_max(const std::string& name, 
-                         std::chrono::milliseconds duration = std::chrono::milliseconds(0)) const;
-    double get_metric_min(const std::string& name, 
-                         std::chrono::milliseconds duration = std::chrono::milliseconds(0)) const;
-    
-    // System monitoring
-    SystemResourceInfo get_system_resources() const;
-    void start_system_monitoring();
-    void stop_system_monitoring();
-    bool is_system_monitoring() const;
-    
-    // Bottleneck detection
-    void add_bottleneck_threshold(const std::string& metric_name, double threshold, 
-                                 const std::string& name = "", const std::string& description = "");
-    void remove_bottleneck_threshold(const std::string& metric_name);
-    std::vector<BottleneckInfo> get_active_bottlenecks() const;
-    std::vector<BottleneckInfo> get_all_bottlenecks() const;
-    void clear_bottlenecks();
-    
-    // Alerting
-    void add_alert_threshold(const std::string& metric_name, double threshold, 
-                            const std::string& severity, const std::string& name = "",
-                            const std::string& description = "");
-    void remove_alert_threshold(const std::string& metric_name);
-    std::vector<PerformanceAlert> get_active_alerts() const;
-    std::vector<PerformanceAlert> get_all_alerts() const;
-    void acknowledge_alert(const std::string& alert_name);
-    void clear_alerts();
-    
-    // Monitoring control
+
+    static ScopedTimer StartTimer(const std::string& metric_name, const std::string& label = "");
+
+    static PerformanceMonitor& get_instance();
+    static PerformanceMonitor* GetInstance();
+
+    static void Initialize();
+    static void Initialize(const PerformanceConfig& config);
+    static void Shutdown();
+
+    bool is_initialized() const;
+
+    void Reset();
+
+    void set_config(const PerformanceConfig& config);
+    PerformanceConfig get_config() const;
+
     void start_monitoring();
     void stop_monitoring();
-    bool is_monitoring() const;
-    void set_monitoring_interval(std::chrono::milliseconds interval);
-    
-    // Callbacks
-    void set_bottleneck_callback(std::function<void(const BottleneckInfo&)> callback);
-    void set_alert_callback(std::function<void(const PerformanceAlert&)> callback);
-    void set_metric_callback(std::function<void(const std::string&, const MetricValue&)> callback);
-    void set_system_resource_callback(std::function<void(const SystemResourceInfo&)> callback);
-    
-    // Reporting
-    void generate_report(const std::string& file_path = "");
-    void generate_metrics_report(const std::string& file_path = "");
-    void generate_system_report(const std::string& file_path = "");
-    void generate_bottleneck_report(const std::string& file_path = "");
-    void generate_alert_report(const std::string& file_path = "");
-    
-    // Utility methods
+    bool is_monitoring() const { return monitoring_enabled_.load(); }
+
+    void add_metric(const std::string& name, MetricType type,
+                    const std::string& description = "");
+    void update_metric(const std::string& name, double value);
+    void increment_metric(const std::string& name, double value);
+
+    void record_counter(const std::string& name, double value,
+                        const std::string& label = "");
+    void record_gauge(const std::string& name, double value,
+                      const std::string& label = "");
+    void record_histogram(const std::string& name, double value,
+                          const std::string& label = "");
+    void record_timer(const std::string& name, double duration_ms,
+                      const std::string& label = "");
+    void record_rate(const std::string& name, double rate,
+                     const std::string& label = "");
+    void record_timing_sample(const std::string& name, double duration_ms,
+                              const std::string& label = "");
+
+    TimerStats GetTimerStats(const std::string& name) const;
+    std::unordered_map<std::string, TimerStats> GetAllStats() const;
+
+    uint64_t start_operation(const std::string& name,
+                             const std::string& context = "");
+    void end_operation(uint64_t operation_id);
+    bool has_operation(uint64_t operation_id) const;
+
+    PerformanceStats get_stats() const;
+
+    void start_measurement(const std::string& name,
+                           const std::string& context = "");
+    void end_measurement(const std::string& name);
+    double get_measurement_duration(const std::string& name);
+
+    void set_callback(std::function<void(const PerformanceStats&)> callback);
+
+    void generate_report(const std::string& filename);
+    void print_stats();
+    void print_metrics();
+    void print_measurements();
+
     std::string get_metric_summary_string() const;
-    std::string get_system_summary_string() const;
-    std::string get_bottleneck_summary_string() const;
-    std::string get_alert_summary_string() const;
-    
-    // Performance profiling
-    void start_profiling(const std::string& profile_name);
-    void stop_profiling(const std::string& profile_name);
-    void add_profiling_point(const std::string& profile_name, const std::string& point_name);
-    void generate_profiling_report(const std::string& profile_name, const std::string& file_path = "");
 
 private:
     PerformanceMonitor();
     ~PerformanceMonitor();
-    
-    // Delete copy semantics
+
     PerformanceMonitor(const PerformanceMonitor&) = delete;
     PerformanceMonitor& operator=(const PerformanceMonitor&) = delete;
-    
-    // Internal methods
-    void initialize();
-    void cleanup();
-    void monitoring_thread_func();
-    void update_system_resources();
-    void check_bottlenecks();
-    void check_alerts();
-    void cleanup_old_metrics();
-    void cleanup_old_alerts();
-    void log_alert(const PerformanceAlert& alert);
-    void log_bottleneck(const BottleneckInfo& bottleneck);
-    std::string get_timestamp_string() const;
-    
-    // Member variables
-    PerformanceMonitorConfig config_;
-    std::atomic<bool> enabled_;
-    std::atomic<bool> monitoring_;
-    std::atomic<bool> system_monitoring_;
-    
-    // Metrics storage
-    std::unordered_map<std::string, MetricInfo> metrics_;
-    std::unordered_map<std::string, std::deque<MetricValue>> metric_history_;
+
+    PerformanceMetric& get_or_create_metric(const std::string& name, MetricType type);
+    void append_sample(PerformanceMetric& metric, double value);
+    void sampling_worker();
+    void update_system_metrics();
+    void detect_bottlenecks();
+    void check_warnings();
+    void cleanup_old_samples();
+    void handle_operation_completion(const OperationInfo& info);
+
+    std::string format_metric(const PerformanceMetric& metric) const;
+    std::string format_measurement(const PerformancePoint& measurement) const;
+    std::string format_stats(const PerformanceStats& stats) const;
+    std::string format_timestamp(const std::chrono::system_clock::time_point& timestamp) const;
+
+    double calculate_average(const std::vector<double>& samples) const;
+    double calculate_percentile(const std::vector<double>& samples, double percentile) const;
+
+    void record_timer_stat(const std::string& name, double duration_ms, const std::string& label);
+    std::string metric_type_to_string(MetricType type) const;
+
+private:
+    static PerformanceMonitor* instance_;
+    static std::mutex instance_mutex_;
+
+    PerformanceConfig config_;
+    std::atomic<bool> initialized_{false};
+    std::atomic<bool> monitoring_enabled_{false};
+    std::atomic<bool> sampling_thread_running_{false};
+
+    std::thread sampling_thread_;
+    std::chrono::system_clock::time_point last_sampling_{};
+
+    std::unordered_map<std::string, PerformanceMetric> metrics_;
     mutable std::mutex metrics_mutex_;
-    
-    // System resources
-    SystemResourceInfo current_system_resources_;
-    std::deque<SystemResourceInfo> system_resources_history_;
-    mutable std::mutex system_resources_mutex_;
-    
-    // Bottlenecks
-    std::unordered_map<std::string, BottleneckInfo> bottlenecks_;
-    std::vector<BottleneckInfo> active_bottlenecks_;
-    mutable std::mutex bottlenecks_mutex_;
-    
-    // Alerts
-    std::unordered_map<std::string, PerformanceAlert> alerts_;
-    std::vector<PerformanceAlert> active_alerts_;
-    std::deque<PerformanceAlert> alerts_history_;
-    mutable std::mutex alerts_mutex_;
-    
-    // Callbacks
-    std::function<void(const BottleneckInfo&)> bottleneck_callback_;
-    std::function<void(const PerformanceAlert&)> alert_callback_;
-    std::function<void(const std::string&, const MetricValue&)> metric_callback_;
-    std::function<void(const SystemResourceInfo&)> system_resource_callback_;
-    
-    // Monitoring
-    std::chrono::milliseconds monitoring_interval_;
-    std::thread monitoring_thread_;
-    std::atomic<bool> stop_monitoring_;
-    
-    // System monitoring handles
-    HANDLE cpu_query_;
-    HANDLE memory_query_;
-    HANDLE disk_query_;
-    HANDLE network_query_;
-    HANDLE process_query_;
-    
-    // Error handler
-    ErrorHandler* error_handler_;
-    
-    // Profiling
-    struct ProfilingSession {
-        std::string name;
-        std::chrono::high_resolution_clock::time_point start_time;
-        std::vector<std::pair<std::string, std::chrono::high_resolution_clock::time_point>> points;
-        bool active;
-    };
-    
-    std::unordered_map<std::string, ProfilingSession> profiling_sessions_;
-    mutable std::mutex profiling_mutex_;
+
+    std::unordered_map<std::string, PerformancePoint> active_measurements_;
+    std::vector<PerformancePoint> completed_measurements_;
+    mutable std::mutex measurements_mutex_;
+
+    std::unordered_map<uint64_t, OperationInfo> active_operations_;
+    std::deque<OperationInfo> completed_operations_;
+    mutable std::mutex operations_mutex_;
+    std::atomic<uint64_t> next_operation_id_{1};
+    size_t max_operation_history_{512};
+
+    std::unordered_map<std::string, TimerStats> timer_stats_;
+    mutable std::mutex timer_stats_mutex_;
+
+    PerformanceStats stats_;
+    std::atomic<double> current_cpu_usage_{0.0};
+    std::atomic<size_t> current_memory_usage_{0};
+    std::atomic<size_t> current_thread_count_{0};
 };
 
-/**
- * Performance monitoring macros
- */
-#define PERFORMANCE_TIMER(name, label) \
-    utils::PerformanceMonitor::ScopedTimer performance_timer_##__LINE__(name, label)
+inline PerformanceMonitor::ScopedTimer::ScopedTimer(const std::string& metric_name,
+                                                    const std::string& label)
+    : metric_name_(metric_name),
+      label_(label),
+      start_time_(std::chrono::high_resolution_clock::now()) {}
 
-#define PERFORMANCE_RECORD_COUNTER(name, value, label) \
-    utils::PerformanceMonitor::get_instance().record_counter(name, value, label)
+inline PerformanceMonitor::ScopedTimer::~ScopedTimer() {
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration<double, std::milli>(end - start_time_).count();
+    PerformanceMonitor::get_instance().record_timing_sample(metric_name_, duration, label_);
+}
 
-#define PERFORMANCE_RECORD_GAUGE(name, value, label) \
-    utils::PerformanceMonitor::get_instance().record_gauge(name, value, label)
-
-#define PERFORMANCE_RECORD_HISTOGRAM(name, value, label) \
-    utils::PerformanceMonitor::get_instance().record_histogram(name, value, label)
-
-#define PERFORMANCE_RECORD_TIMER(name, duration_ms, label) \
-    utils::PerformanceMonitor::get_instance().record_timer(name, duration_ms, label)
-
-#define PERFORMANCE_RECORD_RATE(name, rate, label) \
-    utils::PerformanceMonitor::get_instance().record_rate(name, rate, label)
-
-#define PERFORMANCE_PROFILE_START(name) \
-    utils::PerformanceMonitor::get_instance().start_profiling(name)
-
-#define PERFORMANCE_PROFILE_STOP(name) \
-    utils::PerformanceMonitor::get_instance().stop_profiling(name)
-
-#define PERFORMANCE_PROFILE_POINT(name, point) \
-    utils::PerformanceMonitor::get_instance().add_profiling_point(name, point)
-
-/**
- * Utility functions
- */
-namespace performance_utils {
-    
-    // System resource utilities
-    double get_cpu_usage_percent();
-    double get_memory_usage_percent();
-    double get_disk_usage_percent();
+namespace PerformanceUtils {
+    double get_system_cpu_usage();
+    size_t get_system_memory_usage();
+    size_t get_system_available_memory();
+    size_t get_process_cpu_usage();
     size_t get_process_memory_usage();
-    double get_process_cpu_usage_percent();
-    
-    // Performance utilities
-    double get_elapsed_time_ms(const std::chrono::high_resolution_clock::time_point& start);
-    std::string format_duration_ms(double duration_ms);
-    std::string format_bytes(size_t bytes);
-    std::string format_percentage(double percentage);
-    
-    // Performance analysis
-    double calculate_percentile(const std::vector<double>& values, double percentile);
-    double calculate_standard_deviation(const std::vector<double>& values);
-    double calculate_mean(const std::vector<double>& values);
-    double calculate_median(const std::vector<double>& values);
-    
-    // Performance reporting
-    void generate_performance_summary();
-    void generate_performance_report(const std::string& file_path = "");
-    
-} // namespace performance_utils
+    std::string format_duration(std::chrono::nanoseconds duration);
+    std::string format_memory_size(size_t bytes);
+    std::string format_percentage(double value);
+    bool is_performance_critical();
+    void optimize_performance();
+    std::vector<std::string> get_performance_recommendations();
+}
 
-} // namespace Utils
-} // namespace UndownUnlock
+namespace MemoryUtils {
+    std::string format_memory_size(size_t bytes);
+    void optimize_memory_usage();
+}
+
+} // namespace UndownUnlock::Utils
 
 #ifndef UNDOWNUNLOCK_UTILS_NAMESPACE_ALIAS_DEFINED
 #define UNDOWNUNLOCK_UTILS_NAMESPACE_ALIAS_DEFINED

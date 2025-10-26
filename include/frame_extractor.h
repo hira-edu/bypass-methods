@@ -7,9 +7,12 @@
 #include <memory>
 #include <functional>
 #include "hooks/com_interface_wrapper.h"
+#include "raii_wrappers.h"
 
 namespace UndownUnlock {
 namespace DXHook {
+
+using Hooks::D3D11Texture2DWrapper;
 
 // Forward declarations
 struct FrameData;

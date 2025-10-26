@@ -41,6 +41,7 @@ std::vector<SignaturePattern> GetDXSignatures();
  * @return Vector of SignaturePattern objects
  */
 std::vector<SignaturePattern> GetLockDownSignatures();
+std::pair<std::vector<uint8_t>, std::string> ParsePattern(const std::string& pattern);
 
 /**
  * @brief Get interface information for DirectX COM interfaces

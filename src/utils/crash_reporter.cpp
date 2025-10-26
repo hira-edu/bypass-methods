@@ -1,9 +1,28 @@
-#include "include/utils/crash_reporter.h"
-#include "include/utils/error_handler.h"
+#include "../../include/utils/crash_reporter.h"
+#include "../../include/utils/error_handler.h"
 #include <sstream>
 #include <iomanip>
 #include <filesystem>
+#include <fstream>
+#include <csignal>
+#include <exception>
 #include <dbghelp.h>
+
+namespace {
+std::string FormatMemorySize(size_t bytes) {
+    const char* units[] = {"B", "KB", "MB", "GB", "TB"};
+    int unit_index = 0;
+    double value = static_cast<double>(bytes);
+    while (value >= 1024.0 && unit_index < 4) {
+        value /= 1024.0;
+        ++unit_index;
+    }
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(unit_index == 0 ? 0 : 2) << value << " "
+        << units[unit_index];
+    return oss.str();
+}
+}  // namespace
 
 namespace UndownUnlock::Utils {
 
@@ -11,29 +30,13 @@ namespace UndownUnlock::Utils {
 CrashReporter* CrashReporter::instance_ = nullptr;
 std::mutex CrashReporter::instance_mutex_;
 
-// Static member initialization for other classes
-std::vector<MemoryLeak> MemoryLeakDetector::detected_leaks_;
-std::mutex MemoryLeakDetector::leaks_mutex_;
-std::chrono::system_clock::time_point MemoryLeakDetector::last_detection_;
-
-std::vector<CrashRecovery::RecoveryPoint> CrashRecovery::recovery_points_;
-std::mutex CrashRecovery::recovery_mutex_;
-
-std::vector<CrashPrevention::PreventionRule> CrashPrevention::prevention_rules_;
-std::mutex CrashPrevention::prevention_mutex_;
-
-CrashStatistics::CrashStats CrashStatistics::stats_;
-std::mutex CrashStatistics::stats_mutex_;
-
-std::vector<CrashNotification::NotificationRule> CrashNotification::notification_rules_;
-std::mutex CrashNotification::notification_mutex_;
-
 // CrashReporter implementation
-CrashReporter::CrashReporter() : exception_handler_(nullptr), initialized_(false), handler_installed_(false) {
+CrashReporter::CrashReporter()
+    : exception_handler_(nullptr), initialized_(false), handler_installed_(false) {
 }
 
 CrashReporter::~CrashReporter() {
-    shutdown();
+    shutdown_handlers();
 }
 
 CrashReporter& CrashReporter::get_instance() {
@@ -44,24 +47,25 @@ CrashReporter& CrashReporter::get_instance() {
     return *instance_;
 }
 
-void CrashReporter::initialize(const CrashReporterConfig& config) {
+void CrashReporter::Initialize(const CrashReporterConfig& config) {
     std::lock_guard<std::mutex> lock(instance_mutex_);
     if (!instance_) {
         instance_ = new CrashReporter();
     }
     instance_->set_config(config);
-    instance_->initialize();
+    instance_->initialize_handlers();
 }
 
-void CrashReporter::shutdown() {
+void CrashReporter::Shutdown() {
     std::lock_guard<std::mutex> lock(instance_mutex_);
     if (instance_) {
+        instance_->shutdown_handlers();
         delete instance_;
         instance_ = nullptr;
     }
 }
 
-void CrashReporter::initialize() {
+void CrashReporter::initialize_handlers() {
     if (initialized_.load()) {
         return;
     }
@@ -70,7 +74,7 @@ void CrashReporter::initialize() {
     set_exception_handler();
 }
 
-void CrashReporter::shutdown() {
+void CrashReporter::shutdown_handlers() {
     if (!initialized_.load()) {
         return;
     }
@@ -85,14 +89,16 @@ void CrashReporter::set_exception_handler() {
     }
     
     // Set unhandled exception filter
-    exception_handler_ = SetUnhandledExceptionFilter(unhandled_exception_filter);
+    exception_handler_ =
+        SetUnhandledExceptionFilter(CrashReporter::unhandled_exception_filter);
     
     // Set vectored exception handler
-    AddVectoredExceptionHandler(1, vectored_exception_handler);
+    vectored_handler_ =
+        AddVectoredExceptionHandler(1, CrashReporter::vectored_exception_handler);
     
     // Set signal handlers
-    signal(SIGABRT, abort_handler);
-    std::set_terminate(terminate_handler);
+    signal(SIGABRT, CrashReporter::abort_handler);
+    std::set_terminate(CrashReporter::terminate_handler);
     
     handler_installed_.store(true);
 }
@@ -107,7 +113,10 @@ void CrashReporter::remove_exception_handler() {
         exception_handler_ = nullptr;
     }
     
-    RemoveVectoredExceptionHandler(vectored_exception_handler);
+    if (vectored_handler_) {
+        RemoveVectoredExceptionHandler(vectored_handler_);
+        vectored_handler_ = nullptr;
+    }
     
     signal(SIGABRT, SIG_DFL);
     std::set_terminate(nullptr);
@@ -115,13 +124,16 @@ void CrashReporter::remove_exception_handler() {
     handler_installed_.store(false);
 }
 
-void CrashReporter::report_crash(const CrashInfo& crash_info) {
+void CrashReporter::report_crash(CrashInfo crash_info) {
     if (!config_.enabled) {
         return;
     }
     
     std::lock_guard<std::mutex> lock(crash_mutex_);
-    crash_history_.push_back(crash_info);
+    
+    if (config_.crash_filter && !config_.crash_filter(crash_info)) {
+        return;
+    }
     
     // Generate crash dump if enabled
     if (config_.generate_mini_dumps) {
@@ -134,6 +146,8 @@ void CrashReporter::report_crash(const CrashInfo& crash_info) {
     
     // Save crash info
     save_crash_info(crash_info);
+    
+    crash_history_.push_back(crash_info);
     
     // Send crash report if enabled
     if (config_.send_crash_reports) {
@@ -166,7 +180,7 @@ void CrashReporter::clear_crash_history() {
     crash_history_.clear();
 }
 
-void CrashReporter::generate_crash_dump(const CrashInfo& crash_info, CrashDumpType dump_type) {
+void CrashReporter::generate_crash_dump(CrashInfo& crash_info, CrashDumpType dump_type) {
     std::string dump_filename = generate_dump_filename();
     
     HANDLE dump_file = CreateFileA(dump_filename.c_str(), GENERIC_WRITE, 0, nullptr, 
@@ -185,7 +199,8 @@ void CrashReporter::generate_crash_dump(const CrashInfo& crash_info, CrashDumpTy
             dump_type_flags = MiniDumpWithFullMemory;
             break;
         case CrashDumpType::CUSTOM_DUMP:
-            dump_type_flags = MiniDumpWithDataSegs | MiniDumpWithCodeSegs;
+            dump_type_flags = static_cast<MINIDUMP_TYPE>(
+                MiniDumpWithDataSegs | MiniDumpWithCodeSegs);
             break;
     }
     
@@ -209,7 +224,7 @@ void CrashReporter::generate_crash_dump(const CrashInfo& crash_info, CrashDumpTy
     }
 }
 
-void CrashReporter::save_crash_info(const CrashInfo& crash_info) {
+void CrashReporter::save_crash_info(CrashInfo& crash_info) {
     std::string log_filename = generate_log_filename();
     
     std::ofstream file(log_filename);
@@ -294,13 +309,14 @@ LONG WINAPI CrashReporter::unhandled_exception_filter(EXCEPTION_POINTERS* except
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
-void WINAPI CrashReporter::vectored_exception_handler(EXCEPTION_POINTERS* exception_info) {
+LONG WINAPI CrashReporter::vectored_exception_handler(EXCEPTION_POINTERS* exception_info) {
     auto& reporter = get_instance();
     CrashInfo crash_info = reporter.create_crash_info(exception_info);
     reporter.report_crash(crash_info);
+    return EXCEPTION_CONTINUE_SEARCH;
 }
 
-void WINAPI CrashReporter::abort_handler(int signal) {
+void CrashReporter::abort_handler(int signal) {
     auto& reporter = get_instance();
     CrashInfo crash_info;
     crash_info.crash_type = "SIGABRT";
@@ -312,7 +328,7 @@ void WINAPI CrashReporter::abort_handler(int signal) {
     reporter.report_crash(crash_info);
 }
 
-void WINAPI CrashReporter::terminate_handler() {
+void CrashReporter::terminate_handler() {
     auto& reporter = get_instance();
     CrashInfo crash_info;
     crash_info.crash_type = "Terminate";
@@ -362,7 +378,7 @@ CrashInfo CrashReporter::create_crash_info(EXCEPTION_POINTERS* exception_info) {
     return crash_info;
 }
 
-std::string CrashReporter::get_exception_string(DWORD exception_code) {
+std::string CrashReporter::get_exception_string(DWORD exception_code) const {
     switch (exception_code) {
         case EXCEPTION_ACCESS_VIOLATION: return "EXCEPTION_ACCESS_VIOLATION";
         case EXCEPTION_ARRAY_BOUNDS_EXCEEDED: return "EXCEPTION_ARRAY_BOUNDS_EXCEEDED";
@@ -469,7 +485,7 @@ void CrashReporter::cleanup_old_logs() {
     LOG_INFO("Old log cleanup not implemented in this build", ErrorCategory::FILE_IO);
 }
 
-std::string CrashReporter::generate_dump_filename() {
+std::string CrashReporter::generate_dump_filename() const {
     auto now = std::chrono::system_clock::now();
     auto time_t = std::chrono::system_clock::to_time_t(now);
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -486,7 +502,7 @@ std::string CrashReporter::generate_dump_filename() {
     return oss.str();
 }
 
-std::string CrashReporter::generate_log_filename() {
+std::string CrashReporter::generate_log_filename() const {
     auto now = std::chrono::system_clock::now();
     auto time_t = std::chrono::system_clock::to_time_t(now);
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -503,7 +519,8 @@ std::string CrashReporter::generate_log_filename() {
     return oss.str();
 }
 
-std::string CrashReporter::format_timestamp(const std::chrono::system_clock::time_point& timestamp) {
+std::string CrashReporter::format_timestamp(
+    const std::chrono::system_clock::time_point& timestamp) const {
     auto time_t = std::chrono::system_clock::to_time_t(timestamp);
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         timestamp.time_since_epoch()) % 1000;
@@ -598,8 +615,8 @@ namespace CrashUtils {
         
         if (GlobalMemoryStatusEx(&mem_info)) {
             std::ostringstream oss;
-            oss << "Total: " << MemoryUtils::format_memory_size(mem_info.ullTotalPhys);
-            oss << ", Available: " << MemoryUtils::format_memory_size(mem_info.ullAvailPhys);
+            oss << "Total: " << FormatMemorySize(mem_info.ullTotalPhys);
+            oss << ", Available: " << FormatMemorySize(mem_info.ullAvailPhys);
             oss << ", Load: " << mem_info.dwMemoryLoad << "%";
             return oss.str();
         }

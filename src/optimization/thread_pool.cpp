@@ -1,13 +1,51 @@
 #include "../../include/optimization/thread_pool.h"
 #include "../../include/utils/error_handler.h"
 #include "../../include/utils/performance_monitor.h"
-#include "../../include/utils/memory_tracker.h"
+#include "../../include/memory_tracker.h"
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
 #include <random>
 
 namespace UndownUnlock::Optimization {
+
+namespace {
+ThreadPoolStats SnapshotStats(const ThreadPoolStats& source) {
+    ThreadPoolStats snapshot;
+    snapshot.total_tasks_submitted.store(source.total_tasks_submitted.load());
+    snapshot.total_tasks_completed.store(source.total_tasks_completed.load());
+    snapshot.total_tasks_failed.store(source.total_tasks_failed.load());
+    snapshot.total_tasks_cancelled.store(source.total_tasks_cancelled.load());
+    snapshot.current_tasks_queued.store(source.current_tasks_queued.load());
+    snapshot.current_tasks_running.store(source.current_tasks_running.load());
+    snapshot.current_threads_active.store(source.current_threads_active.load());
+    snapshot.current_threads_idle.store(source.current_threads_idle.load());
+    snapshot.peak_threads_active.store(source.peak_threads_active.load());
+    snapshot.peak_queue_size.store(source.peak_queue_size.load());
+    snapshot.average_task_duration_ms.store(source.average_task_duration_ms.load());
+    snapshot.throughput_tasks_per_second.store(source.throughput_tasks_per_second.load());
+    snapshot.start_time = source.start_time;
+    snapshot.last_task_time = source.last_task_time;
+    return snapshot;
+}
+
+void ResetStats(ThreadPoolStats& stats, const std::chrono::system_clock::time_point& now) {
+    stats.total_tasks_submitted.store(0);
+    stats.total_tasks_completed.store(0);
+    stats.total_tasks_failed.store(0);
+    stats.total_tasks_cancelled.store(0);
+    stats.current_tasks_queued.store(0);
+    stats.current_tasks_running.store(0);
+    stats.current_threads_active.store(0);
+    stats.current_threads_idle.store(0);
+    stats.peak_threads_active.store(0);
+    stats.peak_queue_size.store(0);
+    stats.average_task_duration_ms.store(0.0);
+    stats.throughput_tasks_per_second.store(0.0);
+    stats.start_time = now;
+    stats.last_task_time = now;
+}
+} // namespace
 
 // Static member initialization
 ThreadPool* ThreadPool::instance_ = nullptr;
@@ -18,9 +56,9 @@ ThreadPool::ThreadPool(const ThreadPoolConfig& config)
       active_thread_count_(0), idle_thread_count_(0), task_id_counter_(0) {
     
     // Initialize utility components
-    error_handler_ = &utils::ErrorHandler::GetInstance();
-    performance_monitor_ = &utils::PerformanceMonitor::GetInstance();
-    memory_tracker_ = &utils::MemoryTracker::GetInstance();
+    error_handler_ = utils::ErrorHandler::GetInstance();
+    performance_monitor_ = utils::PerformanceMonitor::GetInstance();
+    memory_tracker_ = &MemoryTracker::GetInstance();
     
     // Set error context
     utils::ErrorContext context;
@@ -39,12 +77,8 @@ ThreadPool::ThreadPool(const ThreadPoolConfig& config)
     performance_monitor_->end_operation(init_operation);
     
     // Track memory allocation for the pool
-    auto pool_allocation = memory_tracker_->track_allocation(
-        "thread_pool", sizeof(ThreadPool), utils::MemoryCategory::SYSTEM
-    );
-    memory_tracker_->release_allocation(pool_allocation);
-    
-    stats_.start_time = std::chrono::system_clock::now();
+    memory_tracker_->TrackAllocation("thread_pool", sizeof(ThreadPool));
+    ResetStats(stats_, std::chrono::system_clock::now());
     last_cleanup_ = std::chrono::system_clock::now();
 }
 
@@ -278,7 +312,7 @@ std::shared_ptr<TaskInfo> ThreadPool::get_task_info(const std::string& task_id) 
 ThreadPoolStats ThreadPool::get_stats() const {
     std::lock_guard<std::mutex> lock(stats_mutex_);
     
-    ThreadPoolStats current_stats = stats_;
+    ThreadPoolStats current_stats = SnapshotStats(stats_);
     
     // Calculate throughput
     auto now = std::chrono::system_clock::now();
@@ -293,8 +327,7 @@ ThreadPoolStats ThreadPool::get_stats() const {
 
 void ThreadPool::reset_stats() {
     std::lock_guard<std::mutex> lock(stats_mutex_);
-    stats_ = ThreadPoolStats();
-    stats_.start_time = std::chrono::system_clock::now();
+    ResetStats(stats_, std::chrono::system_clock::now());
 }
 
 void ThreadPool::print_stats() const {
@@ -535,7 +568,7 @@ void ThreadPool::adjust_thread_count() {
     );
 }
 
-std::string ThreadPool::generate_task_id() const {
+std::string ThreadPool::generate_task_id() {
     static std::atomic<size_t> counter{0};
     size_t id = counter.fetch_add(1);
     return "task_" + std::to_string(id) + "_" + std::to_string(task_id_counter_.fetch_add(1));

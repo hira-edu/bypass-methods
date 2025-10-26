@@ -1,5 +1,5 @@
-#include "include/utils/memory_tracker.h"
-#include "include/utils/error_handler.h"
+#include "../../include/utils/memory_tracker.h"
+#include "../../include/utils/error_handler.h"
 #include <sstream>
 #include <iomanip>
 #include <filesystem>
@@ -11,6 +11,7 @@ namespace UndownUnlock::Utils {
 // Static member initialization
 MemoryTracker* MemoryTracker::instance_ = nullptr;
 std::mutex MemoryTracker::instance_mutex_;
+std::atomic<bool> MemoryTracker::initialized_{false};
 
 // Static member initialization for other classes
 std::vector<MemoryLeak> MemoryLeakDetector::detected_leaks_;
@@ -43,29 +44,44 @@ MemoryTracker& MemoryTracker::get_instance() {
     if (!instance_) {
         instance_ = new MemoryTracker();
     }
+    initialized_.store(true, std::memory_order_release);
     return *instance_;
 }
 
-void MemoryTracker::initialize(const MemoryTrackingConfig& config) {
+void MemoryTracker::Initialize(const MemoryTrackerConfig& config) {
     std::lock_guard<std::mutex> lock(instance_mutex_);
     if (!instance_) {
         instance_ = new MemoryTracker();
     }
     instance_->set_config(config);
+    initialized_.store(true, std::memory_order_release);
 }
 
-void MemoryTracker::shutdown() {
+void MemoryTracker::Initialize() {
+    Initialize(MemoryTrackerConfig());
+}
+
+MemoryTracker* MemoryTracker::GetInstance() {
+    return &get_instance();
+}
+
+bool MemoryTracker::IsInitialized() {
+    return initialized_.load(std::memory_order_acquire);
+}
+
+void MemoryTracker::Shutdown() {
     std::lock_guard<std::mutex> lock(instance_mutex_);
     if (instance_) {
         delete instance_;
         instance_ = nullptr;
     }
+    initialized_.store(false, std::memory_order_release);
 }
 
-void MemoryTracker::track_allocation(void* address, size_t size, AllocationType type,
-                                    const std::string& function, const std::string& file, int line) {
+void* MemoryTracker::track_allocation(void* address, size_t size, AllocationType type,
+                                      const std::string& function, const std::string& file, int line) {
     if (!tracking_enabled_.load() || !config_.enabled) {
-        return;
+        return address;
     }
     
     std::lock_guard<std::mutex> lock(allocations_mutex_);
@@ -161,7 +177,7 @@ std::vector<MemoryLeak> MemoryTracker::detect_leaks() {
     return leaks;
 }
 
-void MemoryTracker::reset() {
+void MemoryTracker::Reset() {
     std::lock_guard<std::mutex> lock(allocations_mutex_);
     allocations_.clear();
     allocations_by_type_.clear();
@@ -173,9 +189,20 @@ void MemoryTracker::reset() {
     
     allocation_count_.store(0);
     deallocation_count_.store(0);
+    
+    {
+        std::lock_guard<std::mutex> named_lock(named_allocations_mutex_);
+        named_allocations_.clear();
+    }
+    {
+        std::lock_guard<std::mutex> handle_lock(active_named_allocations_mutex_);
+        active_named_allocations_.clear();
+    }
+    total_named_bytes_.store(0, std::memory_order_relaxed);
+    next_allocation_id_.store(1, std::memory_order_relaxed);
 }
 
-void MemoryTracker::set_config(const MemoryTrackingConfig& config) {
+void MemoryTracker::set_config(const MemoryTrackerConfig& config) {
     std::lock_guard<std::mutex> lock(allocations_mutex_);
     config_ = config;
     tracking_enabled_.store(config.enabled);
@@ -184,6 +211,10 @@ void MemoryTracker::set_config(const MemoryTrackingConfig& config) {
 void MemoryTracker::enable_tracking(bool enabled) {
     tracking_enabled_.store(enabled);
     config_.enabled = enabled;
+}
+
+bool MemoryTracker::is_initialized() const {
+    return initialized_.load(std::memory_order_acquire);
 }
 
 std::vector<MemoryAllocation> MemoryTracker::get_allocations_by_type(const std::string& type) {
@@ -624,4 +655,122 @@ namespace MemoryUtils {
     }
 }
 
-} // namespace UndownUnlock::Utils 
+void MemoryTracker::track_named_allocation(const std::string& name, size_t size) {
+    if (name.empty() || size == 0) {
+        return;
+    }
+
+    auto now = std::chrono::system_clock::now();
+    std::lock_guard<std::mutex> lock(named_allocations_mutex_);
+    auto& record = named_allocations_[name];
+    if (record.name.empty()) {
+        record.name = name;
+    }
+    record.current_bytes += size;
+    record.total_allocated += size;
+    record.allocation_events++;
+    record.last_allocation = now;
+    if (record.current_bytes > record.peak_bytes) {
+        record.peak_bytes = record.current_bytes;
+    }
+    total_named_bytes_.fetch_add(size, std::memory_order_relaxed);
+}
+
+AllocationHandle MemoryTracker::track_allocation(const std::string& name, size_t size, MemoryCategory category) {
+    if (!tracking_enabled_.load() || !config_.enabled) {
+        return 0;
+    }
+
+    AllocationHandle id = next_allocation_id_.fetch_add(1, std::memory_order_relaxed);
+    ActiveAllocationInfo info;
+    info.id = id;
+    info.name = name.empty() ? ("allocation_" + std::to_string(id)) : name;
+    info.category = category;
+    info.size = size;
+    info.timestamp = std::chrono::system_clock::now();
+
+    {
+        std::lock_guard<std::mutex> lock(active_named_allocations_mutex_);
+        active_named_allocations_[id] = info;
+    }
+
+    track_named_allocation(info.name, size);
+    return id;
+}
+
+void MemoryTracker::release_allocation(AllocationHandle handle) {
+    ActiveAllocationInfo info;
+    bool found = false;
+    {
+        std::lock_guard<std::mutex> lock(active_named_allocations_mutex_);
+        auto it = active_named_allocations_.find(handle);
+        if (it != active_named_allocations_.end()) {
+            info = it->second;
+            active_named_allocations_.erase(it);
+            found = true;
+        }
+    }
+
+    if (!found) {
+        return;
+    }
+
+    track_named_deallocation(info.name, info.size);
+}
+
+bool MemoryTracker::has_allocation(AllocationHandle handle) const {
+    std::lock_guard<std::mutex> lock(active_named_allocations_mutex_);
+    return active_named_allocations_.find(handle) != active_named_allocations_.end();
+}
+
+void MemoryTracker::track_named_deallocation(const std::string& name, size_t size) {
+    std::lock_guard<std::mutex> lock(named_allocations_mutex_);
+    auto it = named_allocations_.find(name);
+    if (it == named_allocations_.end()) {
+        return;
+    }
+
+    auto& record = it->second;
+    if (size == 0 || size > record.current_bytes) {
+        size = record.current_bytes;
+    }
+
+    if (size == 0) {
+        return;
+    }
+
+    record.current_bytes -= size;
+    record.total_deallocated += size;
+    record.deallocation_events++;
+    record.last_deallocation = std::chrono::system_clock::now();
+
+    total_named_bytes_.fetch_sub(size, std::memory_order_relaxed);
+}
+
+std::vector<NamedAllocationRecord> MemoryTracker::get_named_allocations() const {
+    std::lock_guard<std::mutex> lock(named_allocations_mutex_);
+    std::vector<NamedAllocationRecord> records;
+    records.reserve(named_allocations_.size());
+    for (const auto& entry : named_allocations_) {
+        records.push_back(entry.second);
+    }
+    return records;
+}
+
+std::vector<NamedAllocationRecord> MemoryTracker::get_active_named_allocations() const {
+    std::lock_guard<std::mutex> lock(named_allocations_mutex_);
+    std::vector<NamedAllocationRecord> records;
+    records.reserve(named_allocations_.size());
+    for (const auto& entry : named_allocations_) {
+        if (entry.second.current_bytes > 0) {
+            records.push_back(entry.second);
+        }
+    }
+    return records;
+}
+
+size_t MemoryTracker::get_total_named_bytes() const {
+    return total_named_bytes_.load(std::memory_order_relaxed);
+}
+
+} // namespace UndownUnlock::Utils
