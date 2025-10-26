@@ -11,7 +11,8 @@
 #include <functional>
 #include <deque>
 
-namespace utils {
+namespace UndownUnlock {
+namespace Utils {
 
 // Forward declarations
 class ErrorHandler;
@@ -461,4 +462,10 @@ namespace performance_utils {
     
 } // namespace performance_utils
 
-} // namespace utils 
+} // namespace Utils
+} // namespace UndownUnlock
+
+#ifndef UNDOWNUNLOCK_UTILS_NAMESPACE_ALIAS_DEFINED
+#define UNDOWNUNLOCK_UTILS_NAMESPACE_ALIAS_DEFINED
+namespace utils = UndownUnlock::Utils;
+#endif

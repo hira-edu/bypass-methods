@@ -67,8 +67,7 @@ extern "C" {
     
     // Export a simple test function
     __declspec(dllexport) bool IsHookActive() {
-        // Return whether the hook core is initialized
-        return UndownUnlock::DXHook::DXHookCore::GetInstance().m_initialized;
+        return UndownUnlock::DXHook::DXHookCore::GetInstance().IsInitialized();
     }
 }
 

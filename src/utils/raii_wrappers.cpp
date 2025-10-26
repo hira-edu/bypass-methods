@@ -3,7 +3,7 @@
 #include <sstream>
 #include <iomanip>
 
-namespace utils {
+namespace UndownUnlock::Utils {
 
 // Forward declaration
 extern ErrorHandler* g_error_handler;
@@ -1043,4 +1043,4 @@ std::string get_resource_name(HDC dc) {
 
 } // namespace handle_utils
 
-} // namespace utils 
+} // namespace UndownUnlock::Utils

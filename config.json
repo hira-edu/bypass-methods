@@ -1,0 +1,127 @@
+{
+  "capture": {
+    "method": "enhanced_capture",
+    "fallback_chain": [
+      "windows_graphics_capture",
+      "dxgi_desktop_duplication",
+      "direct3d_capture",
+      "gdi_capture"
+    ],
+    "frame_rate": 60,
+    "quality": "high",
+    "compression": true,
+    "compression_level": 6,
+    "hardware_acceleration": true,
+    "buffer_size": 16777216,
+    "focus_window_enforcement": true,
+    "multi_monitor": true
+  },
+  "hooks": {
+    "directx": {
+      "enabled": true,
+      "versions": [
+        "11",
+        "12"
+      ],
+      "interfaces": [
+        "IDXGISwapChain",
+        "ID3D11Device",
+        "ID3D12Device",
+        "ID3D11DeviceContext"
+      ],
+      "deferred_context_capture": true
+    },
+    "windows_api": {
+      "enabled": true,
+      "functions": [
+        "SetForegroundWindow",
+        "GetForegroundWindow",
+        "CreateProcess",
+        "TerminateProcess",
+        "CreateFileW",
+        "ReadFile",
+        "WriteFile"
+      ],
+      "process_monitoring": true
+    },
+    "keyboard": {
+      "enabled": true,
+      "blocked_keys": [
+        "F12",
+        "VK_SNAPSHOT",
+        "VK_PRINT"
+      ],
+      "hotkeys": {
+        "ctrl+alt+s": "screenshot",
+        "ctrl+alt+q": "quit",
+        "ctrl+alt+l": "toggle_logging"
+      }
+    },
+    "process": {
+      "enabled": true,
+      "blocked_processes": [
+        "lockdownbrowser.exe",
+        "proctortrack.exe",
+        "remoteproctor.exe"
+      ],
+      "allowlist_mode": false
+    }
+  },
+  "performance": {
+    "monitoring": true,
+    "sampling_interval": 250,
+    "memory_tracking": true,
+    "leak_threshold": 524288,
+    "optimization": {
+      "memory_pool": true,
+      "thread_pool": true,
+      "hardware_acceleration": true,
+      "adaptive_quality_scaling": true
+    },
+    "limits": {
+      "max_cpu_usage": 75.0,
+      "max_memory_usage": 805306368,
+      "max_frame_rate": 90
+    }
+  },
+  "security": {
+    "anti_detection": {
+      "enabled": true,
+      "hook_concealment": true,
+      "timing_normalization": true,
+      "call_stack_spoofing": true,
+      "api_throttling": true
+    },
+    "obfuscation": {
+      "enabled": true,
+      "string_encryption": true,
+      "function_obfuscation": true,
+      "import_obfuscation": true,
+      "control_flow_flattening": true
+    },
+    "integrity": {
+      "enabled": true,
+      "code_verification": true,
+      "memory_protection": true,
+      "tamper_detection": true,
+      "secure_loader": true
+    }
+  },
+  "logging": {
+    "level": "DEBUG",
+    "file": "logs/undownunlock_advanced.log",
+    "console_output": true,
+    "max_file_size": 20971520,
+    "backup_count": 10,
+    "structured": true
+  },
+  "shared_memory": {
+    "name": "UndownUnlock_FrameBuffer_Advanced",
+    "size": 20971520,
+    "timeout": 3000,
+    "compression": true,
+    "encryption": true,
+    "integrity_checks": true
+  }
+}
+

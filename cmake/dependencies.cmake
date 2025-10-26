@@ -123,6 +123,7 @@ function(setup_dependency_targets)
         _WINDOWS
         _UNICODE
         UNICODE
+        NOMINMAX
     )
     
     # Add include directories

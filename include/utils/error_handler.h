@@ -9,7 +9,16 @@
 #include <chrono>
 #include <windows.h>
 
-namespace utils {
+#ifdef ERROR
+#undef ERROR
+#endif
+#ifdef DEBUG
+#undef DEBUG
+#endif
+
+
+namespace UndownUnlock {
+namespace Utils {
 
 /**
  * Error severity levels
@@ -200,7 +209,7 @@ private:
     
     // Member variables
     std::atomic<ErrorSeverity> minimum_severity_;
-    std::atomic<LogOutput> log_outputs_;
+    std::atomic<LogOutput> log_output_mask_;
     std::string log_file_path_;
     std::atomic<size_t> max_log_file_size_;
     std::atomic<size_t> max_log_files_;
@@ -208,7 +217,7 @@ private:
     std::atomic<bool> include_timestamp_;
     std::atomic<bool> include_thread_info_;
     
-    std::vector<std::unique_ptr<LogOutputBase>> log_outputs_;
+    std::vector<std::unique_ptr<LogOutputBase>> log_sinks_;
     std::mutex log_mutex_;
     std::mutex config_mutex_;
     
@@ -398,5 +407,10 @@ namespace error_utils {
     
 } // namespace error_utils
 
-} // namespace utils 
-} // namespace UndownUnlock::Utils 
+} // namespace Utils
+} // namespace UndownUnlock
+
+#ifndef UNDOWNUNLOCK_UTILS_NAMESPACE_ALIAS_DEFINED
+#define UNDOWNUNLOCK_UTILS_NAMESPACE_ALIAS_DEFINED
+namespace utils = UndownUnlock::Utils;
+#endif

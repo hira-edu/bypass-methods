@@ -4,7 +4,8 @@
 #include <windows.h>
 #include "raii_wrappers.h"
 
-namespace utils {
+namespace UndownUnlock {
+namespace Utils {
 
 /**
  * Custom deleters for Windows resources
@@ -301,4 +302,10 @@ namespace smart_ptr_utils {
 
 } // namespace smart_ptr_utils
 
-} // namespace utils 
+} // namespace Utils
+} // namespace UndownUnlock
+
+#ifndef UNDOWNUNLOCK_UTILS_NAMESPACE_ALIAS_DEFINED
+#define UNDOWNUNLOCK_UTILS_NAMESPACE_ALIAS_DEFINED
+namespace utils = UndownUnlock::Utils;
+#endif

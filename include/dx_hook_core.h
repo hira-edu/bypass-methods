@@ -56,6 +56,11 @@ public:
      */
     void UnregisterFrameCallback(size_t handle);
 
+    /**
+     * @brief Check whether the hook core finished initialization.
+     */
+    bool IsInitialized() const;
+
     // Make FactoryHooks a friend class so it can access private members
     friend class FactoryHooks;
 

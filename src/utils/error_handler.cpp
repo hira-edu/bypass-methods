@@ -8,7 +8,7 @@
 #include <thread>
 #include <chrono>
 
-namespace utils {
+namespace UndownUnlock::Utils {
 
 // Global error handler instance
 static ErrorHandler* g_error_handler = nullptr;
@@ -16,7 +16,7 @@ static ErrorHandler* g_error_handler = nullptr;
 // ErrorHandler implementation
 ErrorHandler::ErrorHandler()
     : minimum_severity_(ErrorSeverity::INFO),
-      log_outputs_(LogOutput::CONSOLE | LogOutput::FILE),
+      log_output_mask_(LogOutput::CONSOLE | LogOutput::FILE),
       max_log_file_size_(10 * 1024 * 1024), // 10MB
       max_log_files_(5),
       include_stack_trace_(true),
@@ -155,7 +155,7 @@ void ErrorHandler::set_minimum_severity(ErrorSeverity severity) {
 }
 
 void ErrorHandler::set_log_outputs(LogOutput outputs) {
-    log_outputs_.store(outputs);
+    log_output_mask_.store(outputs);
     // Reinitialize outputs
     cleanup_log_outputs();
     initialize_log_outputs();
@@ -255,7 +255,7 @@ void ErrorHandler::reset_statistics() {
 
 void ErrorHandler::flush_logs() {
     std::lock_guard<std::mutex> lock(log_mutex_);
-    for (auto& output : log_outputs_) {
+    for (auto& output : log_sinks_) {
         output->flush();
     }
 }
@@ -300,10 +300,10 @@ void ErrorHandler::rotate_log_files() {
 
 void ErrorHandler::clear_logs() {
     std::lock_guard<std::mutex> lock(log_mutex_);
-    for (auto& output : log_outputs_) {
+    for (auto& output : log_sinks_) {
         output->close();
     }
-    log_outputs_.clear();
+    log_sinks_.clear();
     initialize_log_outputs();
 }
 
@@ -395,38 +395,38 @@ std::string ErrorHandler::get_current_error_context() const {
 void ErrorHandler::initialize_log_outputs() {
     std::lock_guard<std::mutex> lock(log_mutex_);
     
-    LogOutput outputs = log_outputs_.load();
+    LogOutput outputs = log_output_mask_.load();
     
     if (outputs & LogOutput::CONSOLE) {
-        log_outputs_.push_back(std::make_unique<ConsoleLogOutput>());
+        log_sinks_.push_back(std::make_unique<ConsoleLogOutput>());
     }
     
     if (outputs & LogOutput::FILE) {
         if (!log_file_path_.empty()) {
-            log_outputs_.push_back(std::make_unique<FileLogOutput>(log_file_path_));
+            log_sinks_.push_back(std::make_unique<FileLogOutput>(log_file_path_));
         }
     }
     
     if (outputs & LogOutput::EVENT_LOG) {
-        log_outputs_.push_back(std::make_unique<EventLogOutput>());
+        log_sinks_.push_back(std::make_unique<EventLogOutput>());
     }
     
     if (outputs & LogOutput::DEBUGGER) {
-        log_outputs_.push_back(std::make_unique<DebuggerLogOutput>());
+        log_sinks_.push_back(std::make_unique<DebuggerLogOutput>());
     }
 }
 
 void ErrorHandler::cleanup_log_outputs() {
     std::lock_guard<std::mutex> lock(log_mutex_);
-    for (auto& output : log_outputs_) {
+    for (auto& output : log_sinks_) {
         output->close();
     }
-    log_outputs_.clear();
+    log_sinks_.clear();
 }
 
 void ErrorHandler::write_to_outputs(const ErrorInfo& error_info, const std::string& formatted_message) {
     std::lock_guard<std::mutex> lock(log_mutex_);
-    for (auto& output : log_outputs_) {
+    for (auto& output : log_sinks_) {
         try {
             output->write(error_info, formatted_message);
         } catch (...) {
@@ -954,4 +954,4 @@ ScopedErrorContext::~ScopedErrorContext() {
 
 } // namespace error_utils
 
-} // namespace utils 
+} // namespace UndownUnlock::Utils

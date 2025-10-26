@@ -377,5 +377,9 @@ void DXHookCore::UnregisterFrameCallback(size_t handle) {
     }
 }
 
+bool DXHookCore::IsInitialized() const {
+    return m_initialized.load();
+}
+
 } // namespace DXHook
-} // namespace UndownUnlock 
+} // namespace UndownUnlock

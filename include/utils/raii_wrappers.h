@@ -6,7 +6,8 @@
 #include <functional>
 #include <system_error>
 
-namespace utils {
+namespace UndownUnlock {
+namespace Utils {
 
 // Forward declarations
 class ErrorHandler;
@@ -501,4 +502,10 @@ namespace handle_utils {
     
 } // namespace handle_utils
 
-} // namespace utils 
+} // namespace Utils
+} // namespace UndownUnlock
+
+#ifndef UNDOWNUNLOCK_UTILS_NAMESPACE_ALIAS_DEFINED
+#define UNDOWNUNLOCK_UTILS_NAMESPACE_ALIAS_DEFINED
+namespace utils = UndownUnlock::Utils;
+#endif

@@ -3,9 +3,14 @@
 #include <windows.h>
 #include <d3d11.h>
 #include <dxgi.h>
+#include <dxgi1_2.h>
 #include <memory>
 #include <type_traits>
 #include <stdexcept>
+
+#ifdef interface
+#undef interface
+#endif
 
 namespace UndownUnlock {
 namespace Hooks {

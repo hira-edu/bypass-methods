@@ -10,7 +10,8 @@
 #include <chrono>
 #include <functional>
 
-namespace utils {
+namespace UndownUnlock {
+namespace Utils {
 
 // Forward declarations
 class ErrorHandler;
@@ -49,11 +50,54 @@ struct MemoryStats {
     std::chrono::system_clock::time_point start_time;
     std::chrono::system_clock::time_point last_allocation_time;
     std::chrono::system_clock::time_point last_deallocation_time;
-    
-    MemoryStats() : total_allocations(0), total_deallocations(0), current_allocations(0),
-                    total_bytes_allocated(0), total_bytes_deallocated(0), current_bytes_allocated(0),
-                    peak_bytes_allocated(0), peak_allocations(0) {}
-};
+
+    MemoryStats()
+        : total_allocations(0),
+          total_deallocations(0),
+          current_allocations(0),
+          total_bytes_allocated(0),
+          total_bytes_deallocated(0),
+          current_bytes_allocated(0),
+          peak_bytes_allocated(0),
+          peak_allocations(0) {}
+
+    MemoryStats(const MemoryStats& other)
+        : total_allocations(other.total_allocations.load()),
+          total_deallocations(other.total_deallocations.load()),
+          current_allocations(other.current_allocations.load()),
+          total_bytes_allocated(other.total_bytes_allocated.load()),
+          total_bytes_deallocated(other.total_bytes_deallocated.load()),
+          current_bytes_allocated(other.current_bytes_allocated.load()),
+          peak_bytes_allocated(other.peak_bytes_allocated.load()),
+          peak_allocations(other.peak_allocations.load()),
+          start_time(other.start_time),
+          last_allocation_time(other.last_allocation_time),
+          last_deallocation_time(other.last_deallocation_time) {}
+
+    MemoryStats& operator=(const MemoryStats& other) {
+        if (this != &other) {
+            total_allocations.store(other.total_allocations.load());
+            total_deallocations.store(other.total_deallocations.load());
+            current_allocations.store(other.current_allocations.load());
+            total_bytes_allocated.store(other.total_bytes_allocated.load());
+            total_bytes_deallocated.store(other.total_bytes_deallocated.load());
+            current_bytes_allocated.store(other.current_bytes_allocated.load());
+            peak_bytes_allocated.store(other.peak_bytes_allocated.load());
+            peak_allocations.store(other.peak_allocations.load());
+            start_time = other.start_time;
+            last_allocation_time = other.last_allocation_time;
+            last_deallocation_time = other.last_deallocation_time;
+        }
+        return *this;
+    }
+
+    MemoryStats(MemoryStats&& other) noexcept
+        : MemoryStats(other) {}
+
+    MemoryStats& operator=(MemoryStats&& other) noexcept {
+        return *this = other;
+    }
+}; 
 
 /**
  * Memory leak information
@@ -375,4 +419,10 @@ namespace memory_utils {
     
 } // namespace memory_utils
 
-} // namespace utils 
+} // namespace Utils
+} // namespace UndownUnlock
+
+#ifndef UNDOWNUNLOCK_UTILS_NAMESPACE_ALIAS_DEFINED
+#define UNDOWNUNLOCK_UTILS_NAMESPACE_ALIAS_DEFINED
+namespace utils = UndownUnlock::Utils;
+#endif
