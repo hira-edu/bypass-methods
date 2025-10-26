@@ -14,9 +14,9 @@ using namespace UndownUnlock::WindowsHook;
 class HookedFunctionsTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        ErrorHandler::GetInstance().ClearLogs();
-        PerformanceMonitor::GetInstance().Reset();
-        MemoryTracker::GetInstance().Reset();
+        utils::utils::ErrorHandler::GetInstance()->ClearLogs();
+        utils::PerformanceMonitor::GetInstance()->Reset();
+        utils::MemoryTracker::GetInstance()->Reset();
         
         // Reset static state
         WindowsAPIHooks::s_isFocusInstalled = false;
@@ -42,7 +42,7 @@ TEST_F(HookedFunctionsTest, HookedSetClipboardData) {
     HANDLE result = HookedSetClipboardData(CF_TEXT, nullptr);
     EXPECT_EQ(result, nullptr);
     
-    auto logs = ErrorHandler::GetInstance().GetLogs();
+    auto logs = utils::utils::ErrorHandler::GetInstance()->GetLogs();
     bool foundClipboardLog = false;
     for (const auto& log : logs) {
         if (log.message.find("SetClipboardData hook called") != std::string::npos) {
@@ -57,7 +57,7 @@ TEST_F(HookedFunctionsTest, HookedEmptyClipboard) {
     BOOL result = HookedEmptyClipboard();
     EXPECT_EQ(result, TRUE);
     
-    auto logs = ErrorHandler::GetInstance().GetLogs();
+    auto logs = utils::ErrorHandler::GetInstance()->GetLogs();
     bool foundEmptyLog = false;
     for (const auto& log : logs) {
         if (log.message.find("EmptyClipboard hook called") != std::string::npos) {
@@ -73,7 +73,7 @@ TEST_F(HookedFunctionsTest, HookedOpenProcess) {
     HANDLE result = HookedOpenProcess(PROCESS_ALL_ACCESS, FALSE, 12345);
     EXPECT_EQ(result, nullptr);
     
-    auto logs = ErrorHandler::GetInstance().GetLogs();
+    auto logs = utils::ErrorHandler::GetInstance()->GetLogs();
     bool foundOpenProcessLog = false;
     for (const auto& log : logs) {
         if (log.message.find("OpenProcess hook called") != std::string::npos && 
@@ -89,7 +89,7 @@ TEST_F(HookedFunctionsTest, HookedTerminateProcess) {
     BOOL result = HookedTerminateProcess(nullptr, 1);
     EXPECT_EQ(result, TRUE);
     
-    auto logs = ErrorHandler::GetInstance().GetLogs();
+    auto logs = utils::ErrorHandler::GetInstance()->GetLogs();
     bool foundTerminateLog = false;
     for (const auto& log : logs) {
         if (log.message.find("TerminateProcess hook called") != std::string::npos && 
@@ -104,7 +104,7 @@ TEST_F(HookedFunctionsTest, HookedTerminateProcess) {
 TEST_F(HookedFunctionsTest, HookedExitProcess) {
     // This function doesn't return, so we just test that it doesn't crash
     // and logs appropriately
-    auto logs = ErrorHandler::GetInstance().GetLogs();
+    auto logs = utils::ErrorHandler::GetInstance()->GetLogs();
     // Should not crash
     EXPECT_TRUE(true); // Placeholder assertion
 }
@@ -117,7 +117,7 @@ TEST_F(HookedFunctionsTest, HookedK32EnumProcesses) {
     EXPECT_EQ(result, TRUE);
     EXPECT_EQ(bytesReturned, 0);
     
-    auto logs = ErrorHandler::GetInstance().GetLogs();
+    auto logs = utils::ErrorHandler::GetInstance()->GetLogs();
     bool foundEnumLog = false;
     for (const auto& log : logs) {
         if (log.message.find("K32EnumProcesses hook called") != std::string::npos) {
@@ -136,7 +136,7 @@ TEST_F(HookedFunctionsTest, HookedGetWindowTextW) {
     EXPECT_EQ(result, 0);
     EXPECT_EQ(buffer[0], L'\0');
     
-    auto logs = ErrorHandler::GetInstance().GetLogs();
+    auto logs = utils::ErrorHandler::GetInstance()->GetLogs();
     bool foundGetWindowTextLog = false;
     for (const auto& log : logs) {
         if (log.message.find("GetWindowTextW hook called") != std::string::npos && 
@@ -163,7 +163,7 @@ TEST_F(HookedFunctionsTest, HookedSetWindowPos) {
     EXPECT_EQ(WindowsAPIHooks::s_setWindowFocuscy, 400);
     EXPECT_EQ(WindowsAPIHooks::s_setWindowFocusuFlags, SWP_NOMOVE);
     
-    auto logs = ErrorHandler::GetInstance().GetLogs();
+    auto logs = utils::ErrorHandler::GetInstance()->GetLogs();
     bool foundSetWindowPosLog = false;
     for (const auto& log : logs) {
         if (log.message.find("SetWindowPos hook called") != std::string::npos && 
@@ -184,7 +184,7 @@ TEST_F(HookedFunctionsTest, HookedShowWindow) {
     EXPECT_EQ(result, TRUE);
     EXPECT_EQ(WindowsAPIHooks::s_bringWindowToTopHWND, testHwnd);
     
-    auto logs = ErrorHandler::GetInstance().GetLogs();
+    auto logs = utils::ErrorHandler::GetInstance()->GetLogs();
     bool foundShowWindowLog = false;
     for (const auto& log : logs) {
         if (log.message.find("ShowWindow hook called") != std::string::npos) {
@@ -199,7 +199,7 @@ TEST_F(HookedFunctionsTest, HookedGetWindow) {
     HWND result = HookedGetWindow(nullptr, GW_HWNDNEXT);
     EXPECT_EQ(result, nullptr);
     
-    auto logs = ErrorHandler::GetInstance().GetLogs();
+    auto logs = utils::ErrorHandler::GetInstance()->GetLogs();
     bool foundGetWindowLog = false;
     for (const auto& log : logs) {
         if (log.message.find("GetWindow hook called") != std::string::npos && 
@@ -218,7 +218,7 @@ TEST_F(HookedFunctionsTest, HookedGetForegroundWindow) {
     // Result depends on system state, but should not crash
     // May be NULL if no main window is found
     
-    auto logs = ErrorHandler::GetInstance().GetLogs();
+    auto logs = utils::ErrorHandler::GetInstance()->GetLogs();
     bool foundForegroundLog = false;
     for (const auto& log : logs) {
         if (log.message.find("Returning the main window") != std::string::npos || 
@@ -239,7 +239,7 @@ TEST_F(HookedFunctionsTest, HookedSetFocus) {
     EXPECT_EQ(WindowsAPIHooks::s_focusHWND, testHwnd);
     
     // Result depends on system state, but should not crash
-    auto logs = ErrorHandler::GetInstance().GetLogs();
+    auto logs = utils::ErrorHandler::GetInstance()->GetLogs();
     bool foundSetFocusLog = false;
     for (const auto& log : logs) {
         if (log.message.find("Returning the main window") != std::string::npos || 
@@ -289,7 +289,7 @@ TEST_F(HookedFunctionsTest, ErrorContextCreation) {
     HookedSetWindowPos(nullptr, nullptr, 0, 0, 0, 0, 0);
     HookedGetForegroundWindow();
     
-    auto contexts = ErrorHandler::GetInstance().GetContexts();
+    auto contexts = utils::ErrorHandler::GetInstance().GetContexts();
     bool foundClipboardContext = false;
     bool foundEmptyContext = false;
     bool foundOpenProcessContext = false;
@@ -326,7 +326,7 @@ TEST_F(HookedFunctionsTest, LoggingLevels) {
     HookedGetForegroundWindow();
     HookedSetFocus(nullptr);
     
-    auto logs = ErrorHandler::GetInstance().GetLogs();
+    auto logs = utils::ErrorHandler::GetInstance()->GetLogs();
     bool foundInfoLog = false;
     bool foundWarningLog = false;
     
@@ -350,7 +350,7 @@ TEST_F(HookedFunctionsTest, ParameterLogging) {
     HookedGetWindowTextW(nullptr, nullptr, 512);
     HookedGetWindow(nullptr, GW_HWNDPREV);
     
-    auto logs = ErrorHandler::GetInstance().GetLogs();
+    auto logs = utils::ErrorHandler::GetInstance()->GetLogs();
     bool foundProcessId = false;
     bool foundExitCode = false;
     bool foundWindowPos = false;
@@ -458,7 +458,7 @@ TEST_F(HookedFunctionsTest, ErrorRecovery) {
         HookedSetWindowPos(nullptr, nullptr, i * 10, i * 20, i * 30, i * 40, 0);
     }
     
-    auto logs = ErrorHandler::GetInstance().GetLogs();
+    auto logs = utils::ErrorHandler::GetInstance()->GetLogs();
     // Should handle multiple calls gracefully
     EXPECT_TRUE(true); // Placeholder assertion
 }
